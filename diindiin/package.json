@@ -1,0 +1,30 @@
+{
+  "name": "diindiin-bot",
+  "version": "1.0.0",
+  "description": "Telegram bot for personal finance management",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "migrate": "node migrations/run_migrations.js"
+  },
+  "keywords": ["telegram", "bot", "finance", "typescript"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "telegraf": "^4.15.0",
+    "pg": "^8.11.3",
+    "dotenv": "^16.3.1",
+    "node-pg-migrate": "^6.2.2",
+    "openai": "^4.20.0",
+    "date-fns": "^2.30.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/pg": "^8.10.9",
+    "typescript": "^5.3.3",
+    "ts-node-dev": "^2.0.0"
+  }
+}
+
