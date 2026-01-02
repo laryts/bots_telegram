@@ -42,10 +42,10 @@ export async function handleStart(ctx: Context, referralCode?: string) {
     welcomeMessage += `Available commands:\n`;
     welcomeMessage += `/add - Add an expense\n`;
     welcomeMessage += `/report - Monthly report\n`;
-    welcomeMessage += `/categories - Expenses by category\n`;
-    welcomeMessage += `/investments - Manage investments\n`;
-    welcomeMessage += `/refer - Get your referral link\n`;
-    welcomeMessage += `/help - Show this help message`;
+    welcomeMessage += `/habits - Manage habits\n`;
+    welcomeMessage += `/okrs - Manage OKRs\n`;
+    welcomeMessage += `/spreadsheet - Generate spreadsheet\n`;
+    welcomeMessage += `/help - Show all commands`;
 
     await ctx.reply(welcomeMessage);
   } catch (error) {
@@ -89,8 +89,30 @@ export async function handleHelp(ctx: Context) {
 
 📈 Investments:
   /investments - List all investments
-  /addinvestment - Add a new investment
+  /addinvestment <name> <type> <amount> <date> - Add investment
   /updateinvestment <id> <value> - Update investment value
+
+🎯 OKRs:
+  /okrs - List all OKRs
+  /addobjective <title> - Add objective
+  /addkr <objective_id> <title> [target] - Add key result
+  /addaction <kr_id> <description> - Add action
+  /updateprogress <action_id> <progress> - Update progress
+  /okr <objective_id> - View specific OKR
+
+🏋️ Habits:
+  /habits - List all habits
+  /addhabit <name> <frequency> - Add habit
+  /habit <name> [value] [date] - Log habit (counts as 1 day)
+  /habit review - Show yearly review of all habits
+  /habitstats <name> - Show habit statistics
+  /habitprogress - Show progress of all habits
+  /linkhabit <name> <action_id> - Link habit to action
+
+📊 Spreadsheets:
+  /spreadsheet - Generate and download CSV
+  /viewspreadsheet - View spreadsheet preview
+  /syncsheets - Sync to Google Sheets
 
 🔗 Referrals:
   /refer - Get your referral link

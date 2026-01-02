@@ -4,6 +4,28 @@ import { initDatabase } from './config/database';
 import { handleStart, handleRefer, handleHelp } from './handlers/userHandlers';
 import { handleAddExpense, handleMonthlyReport, handleCategories } from './handlers/expenseHandlers';
 import { handleListInvestments, handleAddInvestment, handleUpdateInvestmentValue } from './handlers/investmentHandlers';
+import {
+  handleAddObjective,
+  handleAddKeyResult,
+  handleAddAction,
+  handleUpdateProgress,
+  handleListOKRs,
+  handleViewOKR,
+} from './handlers/okrHandlers';
+import {
+  handleAddHabit,
+  handleLogHabit,
+  handleListHabits,
+  handleHabitReview,
+  handleHabitStats,
+  handleHabitProgress,
+  handleLinkHabitToAction,
+} from './handlers/habitHandlers';
+import {
+  handleGenerateSpreadsheet,
+  handleViewSpreadsheet,
+  handleSyncSheets,
+} from './handlers/spreadsheetHandlers';
 
 dotenv.config();
 
@@ -92,6 +114,167 @@ bot.command('updateinvestment', async (ctx) => {
 
   await handleUpdateInvestmentValue(ctx, investmentId, currentValue);
 });
+
+// OKR commands
+bot.command('okrs', handleListOKRs);
+
+bot.command('addobjective', async (ctx) => {
+  const args = ctx.message.text.split(' ').slice(1);
+  
+  if (args.length < 1) {
+    return ctx.reply('Usage: /addobjective <title>\nExample: /addobjective "Ser uma grande gostosa"');
+  }
+
+  const title = args.join(' ');
+  await handleAddObjective(ctx, title);
+});
+
+bot.command('addkr', async (ctx) => {
+  const args = ctx.message.text.split(' ').slice(1);
+  
+  if (args.length < 2) {
+    return ctx.reply('Usage: /addkr <objective_id> <title> [target]\nExample: /addkr 1 "Metas planilha" 42');
+  }
+
+  const objectiveId = parseInt(args[0]);
+  if (isNaN(objectiveId) || objectiveId <= 0) {
+    return ctx.reply('❌ Invalid objective ID.');
+  }
+
+  const title = args.slice(1, args.length - 1).join(' ');
+  const target = args[args.length - 1];
+  await handleAddKeyResult(ctx, objectiveId, title, target);
+});
+
+bot.command('addaction', async (ctx) => {
+  const args = ctx.message.text.split(' ').slice(1);
+  
+  if (args.length < 2) {
+    return ctx.reply('Usage: /addaction <kr_id> <description>\nExample: /addaction 1 "Treinar musculação 4x por semana"');
+  }
+
+  const keyResultId = parseInt(args[0]);
+  if (isNaN(keyResultId) || keyResultId <= 0) {
+    return ctx.reply('❌ Invalid key result ID.');
+  }
+
+  const description = args.slice(1).join(' ');
+  await handleAddAction(ctx, keyResultId, description);
+});
+
+bot.command('updateprogress', async (ctx) => {
+  const args = ctx.message.text.split(' ').slice(1);
+  
+  if (args.length < 2) {
+    return ctx.reply('Usage: /updateprogress <action_id> <progress>\nExample: /updateprogress 1 "2/52"');
+  }
+
+  const actionId = parseInt(args[0]);
+  if (isNaN(actionId) || actionId <= 0) {
+    return ctx.reply('❌ Invalid action ID.');
+  }
+
+  const progress = args.slice(1).join(' ');
+  await handleUpdateProgress(ctx, actionId, progress);
+});
+
+bot.command('okr', async (ctx) => {
+  const args = ctx.message.text.split(' ').slice(1);
+  
+  if (args.length < 1) {
+    return ctx.reply('Usage: /okr <objective_id>\nExample: /okr 1');
+  }
+
+  const objectiveId = parseInt(args[0]);
+  if (isNaN(objectiveId) || objectiveId <= 0) {
+    return ctx.reply('❌ Invalid objective ID.');
+  }
+
+  await handleViewOKR(ctx, objectiveId);
+});
+
+// Habit commands
+bot.command('habits', handleListHabits);
+
+bot.command('addhabit', async (ctx) => {
+  const args = ctx.message.text.split(' ').slice(1);
+  
+  if (args.length < 2) {
+    return ctx.reply('Usage: /addhabit <name> <frequency>\nExample: /addhabit "treino" "4x por semana"');
+  }
+
+  const name = args[0];
+  const frequency = args.slice(1).join(' ');
+  await handleAddHabit(ctx, name, frequency);
+});
+
+bot.command('habit', async (ctx) => {
+  const args = ctx.message.text.split(' ').slice(1);
+  
+  if (args.length < 1) {
+    return ctx.reply('Usage: /habit <name> [value] [date]\nExample: /habit treino\nExample: /habit agua 2L\nExample: /habit treino 2024-01-15');
+  }
+
+  if (args[0].toLowerCase() === 'review') {
+    await handleHabitReview(ctx);
+    return;
+  }
+
+  const name = args[0];
+  let value: string | undefined;
+  let dateStr: string | undefined;
+
+  // Try to parse value and date
+  if (args.length >= 2) {
+    // Check if second arg is a date (YYYY-MM-DD format)
+    const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+    if (datePattern.test(args[1])) {
+      dateStr = args[1];
+    } else {
+      value = args[1];
+      if (args.length >= 3 && datePattern.test(args[2])) {
+        dateStr = args[2];
+      }
+    }
+  }
+
+  await handleLogHabit(ctx, name, value, dateStr);
+});
+
+bot.command('habitstats', async (ctx) => {
+  const args = ctx.message.text.split(' ').slice(1);
+  
+  if (args.length < 1) {
+    return ctx.reply('Usage: /habitstats <name>\nExample: /habitstats treino');
+  }
+
+  const name = args.join(' ');
+  await handleHabitStats(ctx, name);
+});
+
+bot.command('habitprogress', handleHabitProgress);
+
+bot.command('linkhabit', async (ctx) => {
+  const args = ctx.message.text.split(' ').slice(1);
+  
+  if (args.length < 2) {
+    return ctx.reply('Usage: /linkhabit <name> <action_id>\nExample: /linkhabit treino 1');
+  }
+
+  const habitName = args[0];
+  const actionId = parseInt(args[1]);
+
+  if (isNaN(actionId) || actionId <= 0) {
+    return ctx.reply('❌ Invalid action ID.');
+  }
+
+  await handleLinkHabitToAction(ctx, habitName, actionId);
+});
+
+// Spreadsheet commands
+bot.command('spreadsheet', handleGenerateSpreadsheet);
+bot.command('viewspreadsheet', handleViewSpreadsheet);
+bot.command('syncsheets', handleSyncSheets);
 
 // Error handling
 bot.catch((err, ctx) => {
