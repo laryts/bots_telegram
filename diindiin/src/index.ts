@@ -313,10 +313,53 @@ bot.catch((err, ctx) => {
 async function startBot() {
   try {
     await initDatabase();
-    await bot.launch();
-    console.log('Bot started successfully!');
-  } catch (error) {
+    
+    // Use webhooks in production (Railway), polling in development
+    if (process.env.WEBHOOK_URL) {
+      const port = process.env.PORT || 3000;
+      await bot.telegram.setWebhook(`${process.env.WEBHOOK_URL}/webhook`);
+      console.log(`Bot webhook set to: ${process.env.WEBHOOK_URL}/webhook`);
+      
+      // Start Express server for webhooks
+      const express = require('express');
+      const app = express();
+      app.use(express.json());
+      
+      app.post('/webhook', (req: any, res: any) => {
+        bot.handleUpdate(req.body);
+        res.sendStatus(200);
+      });
+      
+      app.listen(port, () => {
+        console.log(`Webhook server listening on port ${port}`);
+      });
+    } else {
+      // Use polling in development
+      // Drop pending updates to avoid conflicts
+      await bot.telegram.deleteWebhook({ drop_pending_updates: true });
+      await bot.launch({
+        dropPendingUpdates: true,
+      });
+      console.log('Bot started successfully with polling!');
+    }
+  } catch (error: any) {
     console.error('Failed to start bot:', error);
+    
+    // If it's a 409 conflict, it means another instance is running
+    if (error.response?.error_code === 409) {
+      console.error('⚠️  Another bot instance is running!');
+      console.error('Solutions:');
+      console.error('1. Stop local bot if running: Ctrl+C');
+      console.error('2. Check Railway - only one deployment should be active');
+      console.error('3. Use webhooks in production (set WEBHOOK_URL env var)');
+      // Don't exit, try to continue (might be temporary)
+      setTimeout(() => {
+        console.log('Retrying bot start...');
+        startBot();
+      }, 5000);
+      return;
+    }
+    
     process.exit(1);
   }
 }

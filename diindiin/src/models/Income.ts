@@ -79,25 +79,39 @@ export async function getIncomesByCategory(
   startDate?: Date,
   endDate?: Date
 ): Promise<{ category: string; total: number; count: number }[]> {
-  let query = `
-    SELECT category, SUM(amount) as total, COUNT(*) as count
-    FROM incomes
-    WHERE user_id = $1
-  `;
-  const params: any[] = [userId];
-  
-  if (startDate && endDate) {
-    query += ' AND date >= $2 AND date <= $3';
-    params.push(startDate, endDate);
-  } else if (startDate) {
-    query += ' AND date >= $2';
-    params.push(startDate);
+  try {
+    let query = `
+      SELECT category, SUM(amount) as total, COUNT(*) as count
+      FROM incomes
+      WHERE user_id = $1
+    `;
+    const params: any[] = [userId];
+    
+    if (startDate && endDate) {
+      query += ' AND date >= $2 AND date <= $3';
+      params.push(startDate, endDate);
+    } else if (startDate) {
+      query += ' AND date >= $2';
+      params.push(startDate);
+    }
+    
+    query += ' GROUP BY category ORDER BY total DESC';
+    
+    const result = await pool.query(query, params);
+    // Ensure total is a number (PostgreSQL returns DECIMAL as string)
+    return result.rows.map(row => ({
+      category: row.category,
+      total: parseFloat(row.total || '0'),
+      count: parseInt(row.count || '0', 10)
+    }));
+  } catch (error: any) {
+    // If table doesn't exist, return empty array
+    if (error?.code === '42P01' || error?.message?.includes('does not exist')) {
+      console.log('Incomes table does not exist yet, returning empty array');
+      return [];
+    }
+    throw error;
   }
-  
-  query += ' GROUP BY category ORDER BY total DESC';
-  
-  const result = await pool.query(query, params);
-  return result.rows;
 }
 
 export async function getTotalIncomesByMonth(userId: number, year: number, month: number): Promise<number> {

@@ -96,8 +96,9 @@ export async function handleMonthlyReport(ctx: Context) {
         report += `📈 By Category:\n`;
 
         for (const cat of byCategory) {
-          const percentage = totalExpenses > 0 ? (cat.total / totalExpenses) * 100 : 0;
-          report += `  • ${cat.category}: R$ ${cat.total.toFixed(2)} (${percentage.toFixed(1)}%)\n`;
+          const catTotal = typeof cat.total === 'number' ? cat.total : parseFloat(cat.total || '0');
+          const percentage = totalExpenses > 0 ? (catTotal / totalExpenses) * 100 : 0;
+          report += `  • ${cat.category}: R$ ${catTotal.toFixed(2)} (${percentage.toFixed(1)}%)\n`;
         }
       }
     }

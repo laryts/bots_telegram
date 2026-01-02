@@ -68,8 +68,10 @@ export async function handleListIncomes(ctx: Context) {
     message += `By Category:\n`;
 
     for (const cat of byCategory) {
-      const percentage = total > 0 ? (cat.total / total) * 100 : 0;
-      message += `  • ${cat.category}: R$ ${cat.total.toFixed(2)} (${percentage.toFixed(1)}%)\n`;
+      const catTotal = typeof cat.total === 'number' ? cat.total : parseFloat(cat.total || '0');
+      const totalNum = typeof total === 'number' ? total : parseFloat(total || '0');
+      const percentage = totalNum > 0 ? (catTotal / totalNum) * 100 : 0;
+      message += `  • ${cat.category}: R$ ${catTotal.toFixed(2)} (${percentage.toFixed(1)}%)\n`;
     }
 
     await ctx.reply(message);

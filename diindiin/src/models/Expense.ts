@@ -84,7 +84,12 @@ export async function getExpensesByCategory(
   query += ' GROUP BY category ORDER BY total DESC';
   
   const result = await pool.query(query, params);
-  return result.rows;
+  // Ensure total is a number (PostgreSQL returns DECIMAL as string)
+  return result.rows.map(row => ({
+    category: row.category,
+    total: parseFloat(row.total || '0'),
+    count: parseInt(row.count || '0', 10)
+  }));
 }
 
 export async function getTotalExpensesByMonth(userId: number, year: number, month: number): Promise<number> {

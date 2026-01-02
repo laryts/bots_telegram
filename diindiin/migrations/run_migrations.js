@@ -13,17 +13,24 @@ async function runMigrations() {
   try {
     await client.query('BEGIN');
     
-    // Read migration file
-    const migrationSQL = fs.readFileSync(
-      path.join(__dirname, '001_initial_schema.sql'),
-      'utf8'
-    );
+    // Run all migrations in order
+    const migrations = [
+      '001_initial_schema.sql',
+      '002_add_okrs.sql',
+      '003_add_incomes.sql'
+    ];
     
-    // Execute migration
-    await client.query(migrationSQL);
+    for (const migrationFile of migrations) {
+      console.log(`Running migration: ${migrationFile}`);
+      const migrationSQL = fs.readFileSync(
+        path.join(__dirname, migrationFile),
+        'utf8'
+      );
+      await client.query(migrationSQL);
+    }
     
     await client.query('COMMIT');
-    console.log('✅ Migration completed successfully!');
+    console.log('✅ All migrations completed successfully!');
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('❌ Migration failed:', error);
@@ -35,4 +42,3 @@ async function runMigrations() {
 }
 
 runMigrations().catch(console.error);
-
