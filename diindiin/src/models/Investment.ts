@@ -69,7 +69,7 @@ export async function deleteInvestment(investmentId: number, userId: number): Pr
     [investmentId, userId]
   );
   
-  return result.rowCount > 0;
+  return (result.rowCount ?? 0) > 0;
 }
 
 export async function getTotalInvestments(userId: number): Promise<{ total_invested: number; total_value: number }> {
