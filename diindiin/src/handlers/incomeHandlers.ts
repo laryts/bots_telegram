@@ -23,9 +23,18 @@ export async function handleAddIncome(ctx: Context, amount: number, description:
       `📝 Description: ${description}\n` +
       `🏷️ Category: ${category}`
     );
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error adding income:', error);
-    await ctx.reply('❌ Error adding income. Please try again.');
+    
+    // Check if table doesn't exist
+    if (error?.code === '42P01' || error?.message?.includes('does not exist')) {
+      return ctx.reply(
+        '❌ Incomes table does not exist. Please run the migration:\n' +
+        'Execute the SQL from migrations/003_add_incomes.sql in your database.'
+      );
+    }
+    
+    await ctx.reply(`❌ Error adding income: ${error?.message || 'Unknown error'}. Please try again.`);
   }
 }
 
@@ -59,7 +68,7 @@ export async function handleListIncomes(ctx: Context) {
     message += `By Category:\n`;
 
     for (const cat of byCategory) {
-      const percentage = (cat.total / total) * 100;
+      const percentage = total > 0 ? (cat.total / total) * 100 : 0;
       message += `  • ${cat.category}: R$ ${cat.total.toFixed(2)} (${percentage.toFixed(1)}%)\n`;
     }
 

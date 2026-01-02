@@ -42,14 +42,37 @@ export async function handleMonthlyReport(ctx: Context) {
     const year = now.getFullYear();
     const month = now.getMonth() + 1;
 
-    const expenses = await getMonthlyExpenses(user.id, year, month);
-    const totalExpenses = await getTotalExpensesByMonth(user.id, year, month);
-    const totalIncomes = await getTotalIncomesByMonth(user.id, year, month);
-    const byCategory = await getExpensesByCategory(
-      user.id,
-      startOfMonth(now),
-      endOfMonth(now)
-    );
+    let totalExpenses = 0;
+    let totalIncomes = 0;
+    let expenses: any[] = [];
+    let byCategory: any[] = [];
+
+    try {
+      expenses = await getMonthlyExpenses(user.id, year, month);
+      totalExpenses = await getTotalExpensesByMonth(user.id, year, month);
+    } catch (error) {
+      console.error('Error fetching expenses:', error);
+      // Continue even if expenses fail
+    }
+
+    try {
+      totalIncomes = await getTotalIncomesByMonth(user.id, year, month);
+    } catch (error) {
+      console.error('Error fetching incomes:', error);
+      // If incomes table doesn't exist, set to 0
+      totalIncomes = 0;
+    }
+
+    try {
+      byCategory = await getExpensesByCategory(
+        user.id,
+        startOfMonth(now),
+        endOfMonth(now)
+      );
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+      byCategory = [];
+    }
 
     if (expenses.length === 0 && totalIncomes === 0) {
       return ctx.reply('📊 No transactions recorded for this month.');
@@ -68,24 +91,32 @@ export async function handleMonthlyReport(ctx: Context) {
     
     if (expenses.length > 0) {
       report += `\n📝 Expense Transactions: ${expenses.length}\n`;
-      report += `📈 By Category:\n`;
+      
+      if (byCategory.length > 0) {
+        report += `📈 By Category:\n`;
 
-      for (const cat of byCategory) {
-        const percentage = (cat.total / totalExpenses) * 100;
-        report += `  • ${cat.category}: R$ ${cat.total.toFixed(2)} (${percentage.toFixed(1)}%)\n`;
+        for (const cat of byCategory) {
+          const percentage = totalExpenses > 0 ? (cat.total / totalExpenses) * 100 : 0;
+          report += `  • ${cat.category}: R$ ${cat.total.toFixed(2)} (${percentage.toFixed(1)}%)\n`;
+        }
       }
     }
 
     // Generate AI insight
-    if (byCategory.length > 0) {
-      const insight = await generateFinancialInsight(byCategory, totalExpenses);
-      report += `\n🤖 AI Insight:\n${insight}`;
+    if (byCategory.length > 0 && totalExpenses > 0) {
+      try {
+        const insight = await generateFinancialInsight(byCategory, totalExpenses);
+        report += `\n🤖 AI Insight:\n${insight}`;
+      } catch (error) {
+        console.error('Error generating AI insight:', error);
+        // Continue without insight if AI fails
+      }
     }
 
     await ctx.reply(report);
   } catch (error) {
     console.error('Error generating report:', error);
-    await ctx.reply('❌ Error generating report. Please try again.');
+    await ctx.reply(`❌ Error generating report: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`);
   }
 }
 

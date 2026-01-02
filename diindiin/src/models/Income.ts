@@ -23,6 +23,10 @@ export async function createIncome(
     [userId, amount, description, category]
   );
   
+  if (!result.rows[0]) {
+    throw new Error('Failed to create income');
+  }
+  
   return result.rows[0];
 }
 
@@ -49,16 +53,25 @@ export async function getIncomesByUser(
 }
 
 export async function getMonthlyIncomes(userId: number, year: number, month: number): Promise<Income[]> {
-  const result = await pool.query(
-    `SELECT * FROM incomes 
-     WHERE user_id = $1 
-     AND EXTRACT(YEAR FROM date) = $2 
-     AND EXTRACT(MONTH FROM date) = $3
-     ORDER BY date DESC`,
-    [userId, year, month]
-  );
-  
-  return result.rows;
+  try {
+    const result = await pool.query(
+      `SELECT * FROM incomes 
+       WHERE user_id = $1 
+       AND EXTRACT(YEAR FROM date) = $2 
+       AND EXTRACT(MONTH FROM date) = $3
+       ORDER BY date DESC`,
+      [userId, year, month]
+    );
+    
+    return result.rows;
+  } catch (error: any) {
+    // If table doesn't exist, return empty array
+    if (error?.code === '42P01' || error?.message?.includes('does not exist')) {
+      console.log('Incomes table does not exist yet, returning empty array');
+      return [];
+    }
+    throw error;
+  }
 }
 
 export async function getIncomesByCategory(
@@ -88,16 +101,25 @@ export async function getIncomesByCategory(
 }
 
 export async function getTotalIncomesByMonth(userId: number, year: number, month: number): Promise<number> {
-  const result = await pool.query(
-    `SELECT COALESCE(SUM(amount), 0) as total
-     FROM incomes
-     WHERE user_id = $1
-     AND EXTRACT(YEAR FROM date) = $2
-     AND EXTRACT(MONTH FROM date) = $3`,
-    [userId, year, month]
-  );
-  
-  return parseFloat(result.rows[0].total);
+  try {
+    const result = await pool.query(
+      `SELECT COALESCE(SUM(amount), 0) as total
+       FROM incomes
+       WHERE user_id = $1
+       AND EXTRACT(YEAR FROM date) = $2
+       AND EXTRACT(MONTH FROM date) = $3`,
+      [userId, year, month]
+    );
+    
+    return parseFloat(result.rows[0]?.total || '0');
+  } catch (error: any) {
+    // If table doesn't exist, return 0
+    if (error?.code === '42P01' || error?.message?.includes('does not exist')) {
+      console.log('Incomes table does not exist yet, returning 0');
+      return 0;
+    }
+    throw error;
+  }
 }
 
 export async function getIncomesByCategoryAndMonth(
