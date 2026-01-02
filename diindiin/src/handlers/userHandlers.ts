@@ -90,7 +90,8 @@ export async function handleHelp(ctx: Context) {
   /incomes - List incomes for current month
 
 📊 Reports:
-  /report - View monthly report (income, expenses, balance)
+  /report - View monthly report in Telegram (income, expenses, balance)
+  /reportcsv - Generate and download monthly report as CSV file
   /categories - View expenses by category
 
 📈 Investments:

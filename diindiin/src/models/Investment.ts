@@ -85,3 +85,22 @@ export async function getTotalInvestments(userId: number): Promise<{ total_inves
   return result.rows[0];
 }
 
+export async function getInvestmentsByTypeAndMonth(
+  userId: number,
+  year: number
+): Promise<{ type: string; month: number; total: number }[]> {
+  const result = await pool.query(
+    `SELECT 
+       type,
+       EXTRACT(MONTH FROM purchase_date)::INTEGER as month,
+       SUM(amount) as total
+     FROM investments
+     WHERE user_id = $1
+     AND EXTRACT(YEAR FROM purchase_date) = $2
+     GROUP BY type, EXTRACT(MONTH FROM purchase_date)
+     ORDER BY type, month`,
+    [userId, year]
+  );
+  
+  return result.rows;
+}

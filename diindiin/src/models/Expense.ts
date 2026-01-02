@@ -100,3 +100,22 @@ export async function getTotalExpensesByMonth(userId: number, year: number, mont
   return parseFloat(result.rows[0].total);
 }
 
+export async function getExpensesByCategoryAndMonth(
+  userId: number,
+  year: number
+): Promise<{ category: string; month: number; total: number }[]> {
+  const result = await pool.query(
+    `SELECT 
+       category,
+       EXTRACT(MONTH FROM date)::INTEGER as month,
+       SUM(amount) as total
+     FROM expenses
+     WHERE user_id = $1
+     AND EXTRACT(YEAR FROM date) = $2
+     GROUP BY category, EXTRACT(MONTH FROM date)
+     ORDER BY category, month`,
+    [userId, year]
+  );
+  
+  return result.rows;
+}

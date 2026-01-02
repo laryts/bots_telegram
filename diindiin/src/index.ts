@@ -4,6 +4,7 @@ import { initDatabase } from './config/database';
 import { handleStart, handleRefer, handleHelp } from './handlers/userHandlers';
 import { handleAddExpense, handleMonthlyReport, handleCategories } from './handlers/expenseHandlers';
 import { handleAddIncome, handleListIncomes } from './handlers/incomeHandlers';
+import { handleReportCSV } from './handlers/reportHandlers';
 import { handleListInvestments, handleAddInvestment, handleUpdateInvestmentValue } from './handlers/investmentHandlers';
 import {
   handleAddObjective,
@@ -64,6 +65,7 @@ bot.command('add', async (ctx) => {
 });
 
 bot.command('report', handleMonthlyReport);
+bot.command('reportcsv', handleReportCSV);
 bot.command('categories', handleCategories);
 
 // Income commands
