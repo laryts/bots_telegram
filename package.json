@@ -1,0 +1,14 @@
+{
+  "name": "bots-telegram-root",
+  "version": "1.0.0",
+  "description": "Root package for telegram bots",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "build": "cd diindiin && npm ci && npm run build",
+    "start": "cd diindiin && npm start",
+    "postinstall": "cd diindiin && npm ci"
+  }
+}
+
