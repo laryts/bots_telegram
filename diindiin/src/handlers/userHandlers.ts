@@ -82,9 +82,15 @@ export async function handleHelp(ctx: Context) {
 💰 Expenses:
   /add <amount> <description> - Add an expense
   Example: /add 50.00 Coffee at Starbucks
+  Example: /add 50,00 Coffee (supports comma)
+
+💰 Income:
+  /income <amount> <description> - Add income
+  Example: /income 5000.00 Salary
+  /incomes - List incomes for current month
 
 📊 Reports:
-  /report - View monthly expense report
+  /report - View monthly report (income, expenses, balance)
   /categories - View expenses by category
 
 📈 Investments:

@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import { initDatabase } from './config/database';
 import { handleStart, handleRefer, handleHelp } from './handlers/userHandlers';
 import { handleAddExpense, handleMonthlyReport, handleCategories } from './handlers/expenseHandlers';
+import { handleAddIncome, handleListIncomes } from './handlers/incomeHandlers';
 import { handleListInvestments, handleAddInvestment, handleUpdateInvestmentValue } from './handlers/investmentHandlers';
 import {
   handleAddObjective,
@@ -48,12 +49,14 @@ bot.command('add', async (ctx) => {
   const args = ctx.message.text.split(' ').slice(1);
   
   if (args.length < 2) {
-    return ctx.reply('Usage: /add <amount> <description>\nExample: /add 50.00 Coffee at Starbucks');
+    return ctx.reply('Usage: /add <amount> <description>\nExample: /add 50.00 Coffee at Starbucks\nExample: /add 50,00 Coffee (supports comma)');
   }
 
-  const amount = parseFloat(args[0]);
+  // Parse amount - support both comma and dot as decimal separator
+  let amountStr = args[0].replace(',', '.');
+  const amount = parseFloat(amountStr);
   if (isNaN(amount) || amount <= 0) {
-    return ctx.reply('❌ Invalid amount. Please provide a valid number.');
+    return ctx.reply('❌ Invalid amount. Please provide a valid number.\nExample: 50.00 or 50,00');
   }
 
   const description = args.slice(1).join(' ');
@@ -62,6 +65,27 @@ bot.command('add', async (ctx) => {
 
 bot.command('report', handleMonthlyReport);
 bot.command('categories', handleCategories);
+
+// Income commands
+bot.command('income', async (ctx) => {
+  const args = ctx.message.text.split(' ').slice(1);
+  
+  if (args.length < 2) {
+    return ctx.reply('Usage: /income <amount> <description>\nExample: /income 5000.00 Salary');
+  }
+
+  // Parse amount - support both comma and dot as decimal separator
+  let amountStr = args[0].replace(',', '.');
+  const amount = parseFloat(amountStr);
+  if (isNaN(amount) || amount <= 0) {
+    return ctx.reply('❌ Invalid amount. Please provide a valid number.\nExample: 50.00 or 50,00');
+  }
+
+  const description = args.slice(1).join(' ');
+  await handleAddIncome(ctx, amount, description);
+});
+
+bot.command('incomes', handleListIncomes);
 
 // Investment commands
 bot.command('investments', handleListInvestments);
@@ -78,11 +102,13 @@ bot.command('addinvestment', async (ctx) => {
 
   const name = args[0];
   const type = args[1];
-  const amount = parseFloat(args[2]);
+  // Parse amount - support both comma and dot as decimal separator
+  let amountStr = args[2].replace(',', '.');
+  const amount = parseFloat(amountStr);
   const dateStr = args[3];
 
   if (isNaN(amount) || amount <= 0) {
-    return ctx.reply('❌ Invalid amount. Please provide a valid number.');
+    return ctx.reply('❌ Invalid amount. Please provide a valid number.\nExample: 50.00 or 50,00');
   }
 
   const purchaseDate = new Date(dateStr);

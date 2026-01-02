@@ -1,6 +1,7 @@
 import { Context } from 'telegraf';
 import { getUserByTelegramId } from '../models/User';
 import { createExpense, getMonthlyExpenses, getExpensesByCategory, getTotalExpensesByMonth } from '../models/Expense';
+import { getTotalIncomesByMonth } from '../models/Income';
 import { categorizeExpense, generateFinancialInsight } from '../services/aiService';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 
@@ -42,30 +43,44 @@ export async function handleMonthlyReport(ctx: Context) {
     const month = now.getMonth() + 1;
 
     const expenses = await getMonthlyExpenses(user.id, year, month);
-    const total = await getTotalExpensesByMonth(user.id, year, month);
+    const totalExpenses = await getTotalExpensesByMonth(user.id, year, month);
+    const totalIncomes = await getTotalIncomesByMonth(user.id, year, month);
     const byCategory = await getExpensesByCategory(
       user.id,
       startOfMonth(now),
       endOfMonth(now)
     );
 
-    if (expenses.length === 0) {
-      return ctx.reply('📊 No expenses recorded for this month.');
+    if (expenses.length === 0 && totalIncomes === 0) {
+      return ctx.reply('📊 No transactions recorded for this month.');
     }
 
     let report = `📊 Monthly Report - ${format(now, 'MMMM yyyy')}\n\n`;
-    report += `💰 Total: R$ ${total.toFixed(2)}\n`;
-    report += `📝 Transactions: ${expenses.length}\n\n`;
-    report += `📈 By Category:\n`;
+    
+    if (totalIncomes > 0) {
+      report += `💰 Income: R$ ${totalIncomes.toFixed(2)}\n`;
+    }
+    
+    report += `💸 Expenses: R$ ${totalExpenses.toFixed(2)}\n`;
+    
+    const balance = totalIncomes - totalExpenses;
+    report += `📊 Balance: R$ ${balance.toFixed(2)}\n`;
+    
+    if (expenses.length > 0) {
+      report += `\n📝 Expense Transactions: ${expenses.length}\n`;
+      report += `📈 By Category:\n`;
 
-    for (const cat of byCategory) {
-      const percentage = (cat.total / total) * 100;
-      report += `  • ${cat.category}: R$ ${cat.total.toFixed(2)} (${percentage.toFixed(1)}%)\n`;
+      for (const cat of byCategory) {
+        const percentage = (cat.total / totalExpenses) * 100;
+        report += `  • ${cat.category}: R$ ${cat.total.toFixed(2)} (${percentage.toFixed(1)}%)\n`;
+      }
     }
 
     // Generate AI insight
-    const insight = await generateFinancialInsight(byCategory, total);
-    report += `\n🤖 AI Insight:\n${insight}`;
+    if (byCategory.length > 0) {
+      const insight = await generateFinancialInsight(byCategory, totalExpenses);
+      report += `\n🤖 AI Insight:\n${insight}`;
+    }
 
     await ctx.reply(report);
   } catch (error) {
