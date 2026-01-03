@@ -163,13 +163,19 @@ Analise o texto fornecido pelo usuário e extraia:
 1. O título do OKR (Objective) - SEMPRE presente
 2. Key Results (KRs) com valores atuais e metas quando mencionados - SEMPRE crie pelo menos 1 KR se possível
 3. Ações (Actions) relacionadas aos KRs - SEMPRE crie ações baseadas nas atividades mencionadas
-4. Hábitos (Habits) mencionados com suas frequências - SEMPRE crie hábitos para atividades recorrentes mencionadas
+4. Hábitos (Habits) - APENAS para atividades PERMANENTES e RECORRENTES
 
 REGRAS IMPORTANTES:
 - SEMPRE crie pelo menos 1 Key Result baseado no objetivo
 - SEMPRE crie Actions para atividades/tarefas mencionadas no texto
-- SEMPRE crie Habits para atividades recorrentes (treino, dieta, beber água, etc.)
-- Se uma ação menciona uma atividade recorrente, crie um hábito para ela
+- Crie Habits APENAS para atividades PERMANENTES e RECORRENTES como:
+  * Beber água (diário)
+  * Treinar/exercitar (semanal ou diário)
+  * Arrumar a casa (semanal ou diário)
+  * Organizar planilha (mensal, semanal)
+  * Meditar, ler, estudar (recorrentes)
+- NÃO crie habits para tarefas únicas ou temporárias (ex: "preparar gatos para viagem", "visitar locais", "pesquisar financiamento")
+- Tarefas únicas ou temporárias devem ser apenas Actions
 - Linke habits às actions relacionadas usando "linkedActionDescription"
 - Se não houver valores numéricos explícitos, crie KRs qualitativos ou com valores estimados
 
@@ -211,13 +217,19 @@ Analyze the text provided by the user and extract:
 1. The OKR title (Objective) - ALWAYS present
 2. Key Results (KRs) with current and target values when mentioned - ALWAYS create at least 1 KR if possible
 3. Actions related to the KRs - ALWAYS create actions based on mentioned activities
-4. Habits mentioned with their frequencies - ALWAYS create habits for recurring activities mentioned
+4. Habits - ONLY for PERMANENT and RECURRING activities
 
 IMPORTANT RULES:
 - ALWAYS create at least 1 Key Result based on the objective
 - ALWAYS create Actions for activities/tasks mentioned in the text
-- ALWAYS create Habits for recurring activities (training, diet, drinking water, etc.)
-- If an action mentions a recurring activity, create a habit for it
+- Create Habits ONLY for PERMANENT and RECURRING activities such as:
+  * Drinking water (daily)
+  * Training/exercising (weekly or daily)
+  * Cleaning house (weekly or daily)
+  * Organizing spreadsheet (monthly, weekly)
+  * Meditating, reading, studying (recurring)
+- DO NOT create habits for one-time or temporary tasks (e.g., "prepare cats for trip", "visit locations", "research financing")
+- One-time or temporary tasks should be Actions only
 - Link habits to related actions using "linkedActionDescription"
 - If there are no explicit numeric values, create qualitative KRs or with estimated values
 

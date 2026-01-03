@@ -130,119 +130,129 @@ export async function handleHelp(ctx: Context) {
   const helpMessage = language === 'pt' ? `
 📚 Comandos do Bot Diindiin:
 
-✨ Comandos Simplificados:
+💰 Income (Receitas):
+  /add income <descrição> <valor>
+  /list income
+  /view <descrição>
+  /edit income <id> [campo=valor]
+  /delete income <id>
 
-➕ Adicionar:
-  /add income salario 20000 - Adicionar receita
-  /add uber 50 - Adicionar despesa
-  /add outcome uber 50 - Adicionar despesa
-  /add investment "reserva" CDB 1000 - Adicionar investimento
-  /add habit treino "4x por semana" - Adicionar hábito
-  /add okr "Ser uma grande gostosa" - Adicionar OKR
-  /add kr 1 "Metas planilha" 42 - Adicionar Key Result
-  /add action 1 "Treinar 4x por semana" - Adicionar ação
-  /add contribution "reserva" CDB 1000 - Adicionar contribuição
+💸 Outcome (Despesas):
+  /add <descrição> <valor>
+  /add outcome <descrição> <valor>
+  /list outcome
+  /view <descrição>
+  /edit expense <id> [campo=valor]
+  /delete expense <id>
 
-📋 Listar (mostra IDs):
-  /list income - Listar receitas
-  /list outcome - Listar despesas
-  /list investments - Listar investimentos
-  /list habit - Listar hábitos
-  /list okr - Listar OKRs
-  /list contributions "reserva" CDB - Listar contribuições
+📈 Investments (Investimentos):
+  /add investment "<nome>" <tipo> <valor>
+  /list investments
+  /view <nome>
+  /edit investment <id> [campo=valor]
+  /delete investment <id>
+  /add contribution "<nome>" <tipo> <valor>
+  /list contributions "<nome>" <tipo>
+  /edit contribution <id> [campo=valor]
+  /delete contribution <id>
 
-👁️ Ver (mostra IDs):
-  /view uber - Ver itens com "uber"
-  /view salario - Ver itens com "salario"
-  /view habit treino - Ver hábito específico
+📊 Reports (Relatórios):
+  /report
+  /reportcsv
+  /categories
 
-✏️ Editar:
-  /edit expense 1 amount=100 - Editar despesa
-  /edit income 2 description="Novo salario" - Editar receita
-  /edit investment 3 current_value=1200 - Editar investimento
-  /edit habit 1 name="treino diario" - Editar hábito
-  /edit okr 1 title="Novo titulo" - Editar OKR
-  /edit kr 1 target_value=50 - Editar Key Result
-  /edit action 1 progress="2/52" - Editar ação
-  /edit contribution 1 amount=1500 - Editar contribuição
+🏋️ Habits (Hábitos):
+  /add habit <nome> <frequência>
+  /list habit
+  /view habit <nome>
+  /edit habit <id> [campo=valor]
+  /delete habit <id>
+  /link habit <nome|id> action <id|descrição>
 
-🗑️ Deletar:
-  /delete expense 1 - Deletar despesa
-  /delete income 1 - Deletar receita
-  /delete investment 1 - Deletar investimento
-  /delete habit 1 - Deletar hábito
-  /delete okr 1 - Deletar OKR
-  /delete kr 1 - Deletar Key Result
-  /delete action 1 - Deletar ação
-  /delete contribution 1 - Deletar contribuição
+🎯 OKRs (OKR, KPI, Actions):
+  /add okr "<título>"
+  /add kr <okr_id|okr_título> <título> [meta]
+  /add action <kr_id|kr_título> <descrição>
+  /list okr
+  /view <título>
+  /edit okr <id> [campo=valor]
+  /edit kr <id> [campo=valor]
+  /edit action <id> [campo=valor]
+  /delete okr <id>
+  /delete kr <id>
+  /delete action <id>
 
-📊 Relatórios:
-  /report - Ver relatório mensal
-  /reportcsv - Baixar relatório CSV
-  /categories - Ver despesas por categoria
+🤖 AI:
+  /ai okr "<título>" [descrição]
 
 🔗 Outros:
-  /refer - Obter link de indicação
-  /language <pt|en> - Mudar idioma
-  /help - Mostrar esta ajuda
+  /start
+  /refer
+  /language <pt|en>
+  /help
     ` : `
 📚 Diindiin Bot Commands:
 
-✨ Simplified Commands:
+💰 Income:
+  /add income <description> <amount>
+  /list income
+  /view <description>
+  /edit income <id> [field=value]
+  /delete income <id>
 
-➕ Add:
-  /add income salario 20000 - Add income
-  /add uber 50 - Add expense
-  /add outcome uber 50 - Add expense
-  /add investment "reserva" CDB 1000 - Add investment
-  /add habit treino "4x per week" - Add habit
-  /add okr "Be awesome" - Add OKR
-  /add kr 1 "Spreadsheet goals" 42 - Add Key Result
-  /add action 1 "Train 4x per week" - Add action
-  /add contribution "reserva" CDB 1000 - Add contribution
+💸 Outcome (Expenses):
+  /add <description> <amount>
+  /add outcome <description> <amount>
+  /list outcome
+  /view <description>
+  /edit expense <id> [field=value]
+  /delete expense <id>
 
-📋 List (shows IDs):
-  /list income - List incomes
-  /list outcome - List expenses
-  /list investments - List investments
-  /list habit - List habits
-  /list okr - List OKRs
-  /list contributions "reserva" CDB - List contributions
-
-👁️ View (shows IDs):
-  /view uber - View items with "uber"
-  /view salario - View items with "salario"
-  /view habit treino - View specific habit
-
-✏️ Edit:
-  /edit expense 1 amount=100 - Edit expense
-  /edit income 2 description="New salary" - Edit income
-  /edit investment 3 current_value=1200 - Edit investment
-  /edit habit 1 name="daily training" - Edit habit
-  /edit okr 1 title="New title" - Edit OKR
-  /edit kr 1 target_value=50 - Edit Key Result
-  /edit action 1 progress="2/52" - Edit action
-  /edit contribution 1 amount=1500 - Edit contribution
-
-🗑️ Delete:
-  /delete expense 1 - Delete expense
-  /delete income 1 - Delete income
-  /delete investment 1 - Delete investment
-  /delete habit 1 - Delete habit
-  /delete okr 1 - Delete OKR
-  /delete kr 1 - Delete Key Result
-  /delete action 1 - Delete action
-  /delete contribution 1 - Delete contribution
+📈 Investments:
+  /add investment "<name>" <type> <amount>
+  /list investments
+  /view <name>
+  /edit investment <id> [field=value]
+  /delete investment <id>
+  /add contribution "<name>" <type> <amount>
+  /list contributions "<name>" <type>
+  /edit contribution <id> [field=value]
+  /delete contribution <id>
 
 📊 Reports:
-  /report - View monthly report
-  /reportcsv - Download CSV report
-  /categories - View expenses by category
+  /report
+  /reportcsv
+  /categories
+
+🏋️ Habits:
+  /add habit <name> <frequency>
+  /list habit
+  /view habit <name>
+  /edit habit <id> [field=value]
+  /delete habit <id>
+  /link habit <name|id> action <id|description>
+
+🎯 OKRs (OKR, KPI, Actions):
+  /add okr "<title>"
+  /add kr <okr_id|okr_title> <title> [target]
+  /add action <kr_id|kr_title> <description>
+  /list okr
+  /view <title>
+  /edit okr <id> [field=value]
+  /edit kr <id> [field=value]
+  /edit action <id> [field=value]
+  /delete okr <id>
+  /delete kr <id>
+  /delete action <id>
+
+🤖 AI:
+  /ai okr "<title>" [description]
 
 🔗 Other:
-  /refer - Get referral link
-  /language <pt|en> - Change language
-  /help - Show this help
+  /start
+  /refer
+  /language <pt|en>
+  /help
   `;
 
   await ctx.reply(helpMessage);
