@@ -201,6 +201,55 @@ export async function findIncomesByDescription(
   return result.rows;
 }
 
+export async function getIncomeById(incomeId: number, userId: number): Promise<Income | null> {
+  const result = await pool.query(
+    'SELECT * FROM incomes WHERE id = $1 AND user_id = $2',
+    [incomeId, userId]
+  );
+  
+  return result.rows[0] || null;
+}
+
+export async function updateIncome(
+  incomeId: number,
+  userId: number,
+  amount?: number,
+  description?: string,
+  category?: string
+): Promise<Income | null> {
+  const updates: string[] = [];
+  const values: any[] = [];
+  let paramCount = 1;
+
+  if (amount !== undefined) {
+    updates.push(`amount = $${paramCount++}`);
+    values.push(amount);
+  }
+  if (description !== undefined) {
+    updates.push(`description = $${paramCount++}`);
+    values.push(description);
+  }
+  if (category !== undefined) {
+    updates.push(`category = $${paramCount++}`);
+    values.push(category);
+  }
+
+  if (updates.length === 0) {
+    return getIncomeById(incomeId, userId);
+  }
+
+  values.push(incomeId, userId);
+  const result = await pool.query(
+    `UPDATE incomes 
+     SET ${updates.join(', ')}
+     WHERE id = $${paramCount} AND user_id = $${paramCount + 1}
+     RETURNING *`,
+    values
+  );
+  
+  return result.rows[0] || null;
+}
+
 export async function deleteIncome(incomeId: number, userId: number): Promise<boolean> {
   const result = await pool.query(
     'DELETE FROM incomes WHERE id = $1 AND user_id = $2 RETURNING id',

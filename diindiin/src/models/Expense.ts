@@ -170,6 +170,55 @@ export async function findExpensesByDescription(
   return result.rows;
 }
 
+export async function getExpenseById(expenseId: number, userId: number): Promise<Expense | null> {
+  const result = await pool.query(
+    'SELECT * FROM expenses WHERE id = $1 AND user_id = $2',
+    [expenseId, userId]
+  );
+  
+  return result.rows[0] || null;
+}
+
+export async function updateExpense(
+  expenseId: number,
+  userId: number,
+  amount?: number,
+  description?: string,
+  category?: string
+): Promise<Expense | null> {
+  const updates: string[] = [];
+  const values: any[] = [];
+  let paramCount = 1;
+
+  if (amount !== undefined) {
+    updates.push(`amount = $${paramCount++}`);
+    values.push(amount);
+  }
+  if (description !== undefined) {
+    updates.push(`description = $${paramCount++}`);
+    values.push(description);
+  }
+  if (category !== undefined) {
+    updates.push(`category = $${paramCount++}`);
+    values.push(category);
+  }
+
+  if (updates.length === 0) {
+    return getExpenseById(expenseId, userId);
+  }
+
+  values.push(expenseId, userId);
+  const result = await pool.query(
+    `UPDATE expenses 
+     SET ${updates.join(', ')}
+     WHERE id = $${paramCount} AND user_id = $${paramCount + 1}
+     RETURNING *`,
+    values
+  );
+  
+  return result.rows[0] || null;
+}
+
 export async function deleteExpense(expenseId: number, userId: number): Promise<boolean> {
   const result = await pool.query(
     'DELETE FROM expenses WHERE id = $1 AND user_id = $2 RETURNING id',

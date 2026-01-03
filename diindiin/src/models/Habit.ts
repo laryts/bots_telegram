@@ -51,6 +51,65 @@ export async function getHabitsByUser(userId: number): Promise<Habit[]> {
   return result.rows;
 }
 
+export async function getHabitById(habitId: number, userId: number): Promise<Habit | null> {
+  const result = await pool.query(
+    'SELECT * FROM habits WHERE id = $1 AND user_id = $2',
+    [habitId, userId]
+  );
+  
+  return result.rows[0] || null;
+}
+
+export async function updateHabit(
+  habitId: number,
+  userId: number,
+  name?: string,
+  description?: string,
+  frequencyType?: string,
+  frequencyValue?: number,
+  unit?: string
+): Promise<Habit | null> {
+  const updates: string[] = [];
+  const values: any[] = [];
+  let paramCount = 1;
+
+  if (name !== undefined) {
+    updates.push(`name = $${paramCount++}`);
+    values.push(name);
+  }
+  if (description !== undefined) {
+    updates.push(`description = $${paramCount++}`);
+    values.push(description);
+  }
+  if (frequencyType !== undefined) {
+    updates.push(`frequency_type = $${paramCount++}`);
+    values.push(frequencyType);
+  }
+  if (frequencyValue !== undefined) {
+    updates.push(`frequency_value = $${paramCount++}`);
+    values.push(frequencyValue);
+  }
+  if (unit !== undefined) {
+    updates.push(`unit = $${paramCount++}`);
+    values.push(unit);
+  }
+
+  if (updates.length === 0) {
+    return getHabitById(habitId, userId);
+  }
+
+  values.push(habitId, userId);
+  const result = await pool.query(
+    `UPDATE habits 
+     SET ${updates.join(', ')}
+     WHERE id = $${paramCount} AND user_id = $${paramCount + 1}
+     RETURNING *`,
+    values
+  );
+  
+  return result.rows[0] || null;
+}
+
 export async function findHabitByName(userId: number, name: string): Promise<Habit | null> {
   // Case-insensitive partial match
   const result = await pool.query(

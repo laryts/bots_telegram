@@ -118,6 +118,15 @@ export async function createKeyResult(
   return result.rows[0];
 }
 
+export async function getKeyResultById(keyResultId: number): Promise<KeyResult | null> {
+  const result = await pool.query(
+    'SELECT * FROM key_results WHERE id = $1',
+    [keyResultId]
+  );
+  
+  return result.rows[0] || null;
+}
+
 export async function getKeyResultsByObjective(objectiveId: number): Promise<KeyResult[]> {
   const result = await pool.query(
     'SELECT * FROM key_results WHERE objective_id = $1 ORDER BY created_at DESC',
@@ -186,6 +195,15 @@ export async function createAction(
   );
   
   return result.rows[0];
+}
+
+export async function getActionById(actionId: number): Promise<Action | null> {
+  const result = await pool.query(
+    'SELECT * FROM actions WHERE id = $1',
+    [actionId]
+  );
+  
+  return result.rows[0] || null;
 }
 
 export async function getActionsByKeyResult(keyResultId: number): Promise<Action[]> {

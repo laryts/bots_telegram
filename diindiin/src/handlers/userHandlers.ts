@@ -131,174 +131,118 @@ export async function handleHelp(ctx: Context) {
 📚 Comandos do Bot Diindiin:
 
 ✨ Comandos Simplificados:
+
+➕ Adicionar:
   /add income salario 20000 - Adicionar receita
   /add uber 50 - Adicionar despesa
   /add outcome uber 50 - Adicionar despesa
   /add investment "reserva" CDB 1000 - Adicionar investimento
   /add habit treino "4x por semana" - Adicionar hábito
   /add okr "Ser uma grande gostosa" - Adicionar OKR
+  /add kr 1 "Metas planilha" 42 - Adicionar Key Result
+  /add action 1 "Treinar 4x por semana" - Adicionar ação
+  /add contribution "reserva" CDB 1000 - Adicionar contribuição
+
+📋 Listar (mostra IDs):
   /list income - Listar receitas
   /list outcome - Listar despesas
   /list investments - Listar investimentos
   /list habit - Listar hábitos
+  /list okr - Listar OKRs
+  /list contributions "reserva" CDB - Listar contribuições
+
+👁️ Ver (mostra IDs):
   /view uber - Ver itens com "uber"
   /view salario - Ver itens com "salario"
   /view habit treino - Ver hábito específico
-  /update investment "reserva" CDB 1200 - Atualizar investimento
-  /delete expense 1 - Deletar despesa ID 1
-  /delete income 1 - Deletar receita ID 1
-  /delete investment 1 - Deletar investimento ID 1
 
-⚡ Atalhos Rápidos:
-  /habits - Ver todos os hábitos
-  /investments - Ver todos os investimentos
-  /incomes - Ver todas as receitas
-  /outcomes - Ver todas as despesas
-  /okrs - Ver todos os OKRs
+✏️ Editar:
+  /edit expense 1 amount=100 - Editar despesa
+  /edit income 2 description="Novo salario" - Editar receita
+  /edit investment 3 current_value=1200 - Editar investimento
+  /edit habit 1 name="treino diario" - Editar hábito
+  /edit okr 1 title="Novo titulo" - Editar OKR
+  /edit kr 1 target_value=50 - Editar Key Result
+  /edit action 1 progress="2/52" - Editar ação
+  /edit contribution 1 amount=1500 - Editar contribuição
 
-💰 Despesas:
-  /add <descrição> <valor> - Adicionar uma despesa
-  Exemplo: /add uber 50
-  Exemplo: /add outcome uber 50
-
-💰 Receitas:
-  /add income <descrição> <valor> - Adicionar receita
-  Exemplo: /add income salario 20000
-  /list income - Listar receitas
+🗑️ Deletar:
+  /delete expense 1 - Deletar despesa
+  /delete income 1 - Deletar receita
+  /delete investment 1 - Deletar investimento
+  /delete habit 1 - Deletar hábito
+  /delete okr 1 - Deletar OKR
+  /delete kr 1 - Deletar Key Result
+  /delete action 1 - Deletar ação
+  /delete contribution 1 - Deletar contribuição
 
 📊 Relatórios:
-  /report - Ver relatório mensal no Telegram (receitas, despesas, saldo)
-  /reportcsv - Gerar e baixar relatório mensal como arquivo CSV
+  /report - Ver relatório mensal
+  /reportcsv - Baixar relatório CSV
   /categories - Ver despesas por categoria
 
-📈 Investimentos:
-  /investments - Listar todos os investimentos
-  /investimentos - Listar todos os investimentos
-  /list investimentos - Listar todos os investimentos
-  /addinvestment <nome> <tipo> <valor> [valor_atual] [data] - Adicionar contribuição ao investimento
-  /add investimento <nome> <tipo> <valor> [valor_atual] [data] - Adicionar investimento
-  /updateinvestment <nome> <tipo> <valor_atual> - Atualizar valor do investimento
-  /update investimento <nome> <tipo> <valor_atual> - Atualizar investimento
-  /atualizar investimento <nome> <tipo> <valor_atual> - Atualizar investimento
-  /contributions <nome> <tipo> - Listar todas as contribuições de um investimento
-
-🎯 OKRs:
-  /okrs - Listar todos os OKRs
-  /addobjective <título> - Adicionar objetivo
-  /addkr <objective_id> <título> [meta] - Adicionar resultado-chave
-  /addaction <kr_id> <descrição> - Adicionar ação
-  /updateprogress <action_id> <progresso> - Atualizar progresso
-  /okr <objective_id> - Ver OKR específico
-
-🏋️ Hábitos:
-  /habits - Listar todos os hábitos
-  /hábitos - Listar todos os hábitos
-  /list hábitos - Listar todos os hábitos
-  /addhabit <nome> <frequência> - Adicionar hábito
-  /habit <nome> [valor] [data] - Registrar hábito (conta como 1 dia)
-  /habit review - Mostrar revisão anual de todos os hábitos
-  /habitstats <nome> - Mostrar estatísticas do hábito
-  /habitprogress - Mostrar progresso de todos os hábitos
-  /linkhabit <nome> <action_id> - Vincular hábito a ação
-
-📊 Planilhas:
-  /spreadsheet - Gerar e baixar CSV
-  /viewspreadsheet - Ver prévia da planilha
-  /syncsheets - Sincronizar com Google Sheets
-
-🔗 Indicações:
-  /refer - Obter seu link de indicação
-
-🌐 Idioma:
+🔗 Outros:
+  /refer - Obter link de indicação
   /language <pt|en> - Mudar idioma
-  /idioma <pt|en> - Mudar idioma
-
-❓ Ajuda:
-  /help - Mostrar esta mensagem de ajuda
+  /help - Mostrar esta ajuda
     ` : `
 📚 Diindiin Bot Commands:
 
 ✨ Simplified Commands:
+
+➕ Add:
   /add income salario 20000 - Add income
   /add uber 50 - Add expense
   /add outcome uber 50 - Add expense
   /add investment "reserva" CDB 1000 - Add investment
   /add habit treino "4x per week" - Add habit
   /add okr "Be awesome" - Add OKR
+  /add kr 1 "Spreadsheet goals" 42 - Add Key Result
+  /add action 1 "Train 4x per week" - Add action
+  /add contribution "reserva" CDB 1000 - Add contribution
+
+📋 List (shows IDs):
   /list income - List incomes
   /list outcome - List expenses
   /list investments - List investments
   /list habit - List habits
+  /list okr - List OKRs
+  /list contributions "reserva" CDB - List contributions
+
+👁️ View (shows IDs):
   /view uber - View items with "uber"
   /view salario - View items with "salario"
   /view habit treino - View specific habit
-  /update investment "reserva" CDB 1200 - Update investment
-  /delete expense 1 - Delete expense ID 1
-  /delete income 1 - Delete income ID 1
-  /delete investment 1 - Delete investment ID 1
 
-⚡ Quick Shortcuts:
-  /habits - View all habits
-  /investments - View all investments
-  /incomes - View all incomes
-  /outcomes - View all expenses
-  /okrs - View all OKRs
+✏️ Edit:
+  /edit expense 1 amount=100 - Edit expense
+  /edit income 2 description="New salary" - Edit income
+  /edit investment 3 current_value=1200 - Edit investment
+  /edit habit 1 name="daily training" - Edit habit
+  /edit okr 1 title="New title" - Edit OKR
+  /edit kr 1 target_value=50 - Edit Key Result
+  /edit action 1 progress="2/52" - Edit action
+  /edit contribution 1 amount=1500 - Edit contribution
 
-💰 Expenses:
-  /add <description> <amount> - Add an expense
-  Example: /add uber 50
-  Example: /add outcome uber 50
-
-💰 Income:
-  /add income <description> <amount> - Add income
-  Example: /add income salario 20000
-  /list income - List incomes
+🗑️ Delete:
+  /delete expense 1 - Delete expense
+  /delete income 1 - Delete income
+  /delete investment 1 - Delete investment
+  /delete habit 1 - Delete habit
+  /delete okr 1 - Delete OKR
+  /delete kr 1 - Delete Key Result
+  /delete action 1 - Delete action
+  /delete contribution 1 - Delete contribution
 
 📊 Reports:
-  /report - View monthly report in Telegram (income, expenses, balance)
-  /reportcsv - Generate and download monthly report as CSV file
+  /report - View monthly report
+  /reportcsv - Download CSV report
   /categories - View expenses by category
 
-📈 Investments:
-  /investments - List all investments
-  /list investments - List all investments
-  /addinvestment <name> <type> <amount> [current_value] [date] - Add contribution to investment
-  /add investment <name> <type> <amount> [current_value] [date] - Add investment
-  /updateinvestment <name> <type> <current_value> - Update investment value
-  /update investment <name> <type> <current_value> - Update investment
-  /contributions <name> <type> - List all contributions for an investment
-
-🎯 OKRs:
-  /okrs - List all OKRs
-  /addobjective <title> - Add objective
-  /addkr <objective_id> <title> [target] - Add key result
-  /addaction <kr_id> <description> - Add action
-  /updateprogress <action_id> <progress> - Update progress
-  /okr <objective_id> - View specific OKR
-
-🏋️ Habits:
-  /habits - List all habits
-  /list habits - List all habits
-  /addhabit <name> <frequency> - Add habit
-  /habit <name> [value] [date] - Log habit (counts as 1 day)
-  /habit review - Show yearly review of all habits
-  /habitstats <name> - Show habit statistics
-  /habitprogress - Show progress of all habits
-  /linkhabit <name> <action_id> - Link habit to action
-
-📊 Spreadsheets:
-  /spreadsheet - Generate and download CSV
-  /viewspreadsheet - View spreadsheet preview
-  /syncsheets - Sync to Google Sheets
-
-🔗 Referrals:
-  /refer - Get your referral link
-
-🌐 Language:
+🔗 Other:
+  /refer - Get referral link
   /language <pt|en> - Change language
-
-❓ Help:
-  /help - Show this help message
+  /help - Show this help
   `;
 
   await ctx.reply(helpMessage);

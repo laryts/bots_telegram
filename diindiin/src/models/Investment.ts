@@ -249,6 +249,77 @@ export async function createInvestmentContribution(
   }
 }
 
+export async function getContributionById(contributionId: number, userId: number): Promise<InvestmentContribution | null> {
+  const result = await pool.query(
+    `SELECT ic.*
+     FROM investment_contributions ic
+     INNER JOIN investments i ON ic.investment_id = i.id
+     WHERE ic.id = $1 AND i.user_id = $2`,
+    [contributionId, userId]
+  );
+  
+  return result.rows[0] || null;
+}
+
+export async function updateContribution(
+  contributionId: number,
+  userId: number,
+  amount?: number,
+  contributionDate?: Date,
+  notes?: string
+): Promise<InvestmentContribution | null> {
+  const contribution = await getContributionById(contributionId, userId);
+  if (!contribution) {
+    return null;
+  }
+
+  const updates: string[] = [];
+  const values: any[] = [];
+  let paramCount = 1;
+
+  if (amount !== undefined) {
+    updates.push(`amount = $${paramCount++}`);
+    values.push(amount);
+  }
+  if (contributionDate !== undefined) {
+    updates.push(`contribution_date = $${paramCount++}`);
+    values.push(contributionDate);
+  }
+  if (notes !== undefined) {
+    updates.push(`notes = $${paramCount++}`);
+    values.push(notes);
+  }
+
+  if (updates.length === 0) {
+    return contribution;
+  }
+
+  values.push(contributionId);
+  const result = await pool.query(
+    `UPDATE investment_contributions 
+     SET ${updates.join(', ')}
+     WHERE id = $${paramCount}
+     RETURNING *`,
+    values
+  );
+  
+  return result.rows[0] || null;
+}
+
+export async function deleteContribution(contributionId: number, userId: number): Promise<boolean> {
+  const contribution = await getContributionById(contributionId, userId);
+  if (!contribution) {
+    return false;
+  }
+
+  const result = await pool.query(
+    'DELETE FROM investment_contributions WHERE id = $1',
+    [contributionId]
+  );
+  
+  return (result.rowCount ?? 0) > 0;
+}
+
 export async function getContributionsByInvestment(
   userId: number,
   name: string,
