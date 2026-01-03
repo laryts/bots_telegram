@@ -135,15 +135,26 @@ export async function handleHelp(ctx: Context) {
   /add uber 50 - Adicionar despesa
   /add outcome uber 50 - Adicionar despesa
   /add investment "reserva" CDB 1000 - Adicionar investimento
+  /add habit treino "4x por semana" - Adicionar hábito
+  /add okr "Ser uma grande gostosa" - Adicionar OKR
   /list income - Listar receitas
   /list outcome - Listar despesas
   /list investments - Listar investimentos
+  /list habit - Listar hábitos
   /view uber - Ver itens com "uber"
   /view salario - Ver itens com "salario"
+  /view habit treino - Ver hábito específico
   /update investment "reserva" CDB 1200 - Atualizar investimento
   /delete expense 1 - Deletar despesa ID 1
   /delete income 1 - Deletar receita ID 1
   /delete investment 1 - Deletar investimento ID 1
+
+⚡ Atalhos Rápidos:
+  /habits - Ver todos os hábitos
+  /investments - Ver todos os investimentos
+  /incomes - Ver todas as receitas
+  /outcomes - Ver todas as despesas
+  /okrs - Ver todos os OKRs
 
 💰 Despesas:
   /add <descrição> <valor> - Adicionar uma despesa
@@ -212,15 +223,26 @@ export async function handleHelp(ctx: Context) {
   /add uber 50 - Add expense
   /add outcome uber 50 - Add expense
   /add investment "reserva" CDB 1000 - Add investment
+  /add habit treino "4x per week" - Add habit
+  /add okr "Be awesome" - Add OKR
   /list income - List incomes
   /list outcome - List expenses
   /list investments - List investments
+  /list habit - List habits
   /view uber - View items with "uber"
   /view salario - View items with "salario"
+  /view habit treino - View specific habit
   /update investment "reserva" CDB 1200 - Update investment
   /delete expense 1 - Delete expense ID 1
   /delete income 1 - Delete income ID 1
   /delete investment 1 - Delete investment ID 1
+
+⚡ Quick Shortcuts:
+  /habits - View all habits
+  /investments - View all investments
+  /incomes - View all incomes
+  /outcomes - View all expenses
+  /okrs - View all OKRs
 
 💰 Expenses:
   /add <description> <amount> - Add an expense

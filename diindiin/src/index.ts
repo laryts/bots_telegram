@@ -7,10 +7,13 @@ import { handleAddIncome, handleListIncomes } from './handlers/incomeHandlers';
 import { findExpensesByDescription, deleteExpense } from './models/Expense';
 import { findIncomesByDescription, deleteIncome } from './models/Income';
 import { findInvestmentsByName, deleteInvestment } from './models/Investment';
+import { findHabitByName, getHabitLogs } from './models/Habit';
+import { getObjectivesByUser } from './models/OKR';
 import { format } from 'date-fns';
-import { fromUTC } from './utils/timezone';
+import { fromUTC, nowInTimezone } from './utils/timezone';
 import { handleReportCSV } from './handlers/reportHandlers';
 import { handleListInvestments, handleAddInvestment, handleUpdateInvestmentValue, handleListContributions } from './handlers/investmentHandlers';
+import { getHabitStats } from './models/Habit';
 import {
   handleAddObjective,
   handleAddKeyResult,
@@ -78,7 +81,7 @@ bot.command('add', async (ctx) => {
   
   // Check first argument for entity type
   const firstArg = parts[0].toLowerCase();
-  let entityType: 'income' | 'expense' | 'investment' | null = null;
+  let entityType: 'income' | 'expense' | 'investment' | 'habit' | 'okr' | null = null;
   let args: string[] = [];
   
   if (firstArg === 'income') {
@@ -89,6 +92,12 @@ bot.command('add', async (ctx) => {
     args = parts.slice(1);
   } else if (firstArg === 'investment') {
     entityType = 'investment';
+    args = parts.slice(1);
+  } else if (firstArg === 'habit' || firstArg === 'habits') {
+    entityType = 'habit';
+    args = parts.slice(1);
+  } else if (firstArg === 'okr' || firstArg === 'okrs' || firstArg === 'objective' || firstArg === 'objectives') {
+    entityType = 'okr';
     args = parts.slice(1);
   } else {
     // If first arg is a number, it's an expense (backward compatibility)
@@ -212,6 +221,33 @@ bot.command('add', async (ctx) => {
     }
     
     await handleAddInvestment(ctx, name, type, amount, purchaseDate, currentValue, notes);
+    return;
+  }
+  
+  // Handle habit
+  if (entityType === 'habit') {
+    if (args.length < 2) {
+      return ctx.reply(
+        `${t(language, 'messages.usage')}: /add habit <name> <frequency>\n` +
+        `${t(language, 'messages.example')}: /add habit treino "4x por semana"`
+      );
+    }
+    const name = args[0];
+    const frequency = args.slice(1).join(' ');
+    await handleAddHabit(ctx, name, frequency);
+    return;
+  }
+  
+  // Handle OKR (objective)
+  if (entityType === 'okr') {
+    if (args.length < 1) {
+      return ctx.reply(
+        `${t(language, 'messages.usage')}: /add okr <title>\n` +
+        `${t(language, 'messages.example')}: /add okr "Ser uma grande gostosa"`
+      );
+    }
+    const title = args.join(' ');
+    await handleAddObjective(ctx, title);
     return;
   }
   
@@ -363,6 +399,9 @@ bot.command('income', async (ctx) => {
 
 bot.command('incomes', handleListIncomes);
 
+// Direct shortcuts for listing
+bot.command('outcomes', handleCategories); // List expenses (using categories as a quick view)
+
 // Unified list command (multilingual)
 bot.command('list', async (ctx) => {
   if (!ctx.message || !('text' in ctx.message)) return;
@@ -398,11 +437,12 @@ bot.command('list', async (ctx) => {
   
   // Default: show help or list all
   await ctx.reply(
-    `${t(language, 'messages.usage')}: /list <income|outcome|investment|habit>\n` +
+    `${t(language, 'messages.usage')}: /list <income|outcome|investment|habit|okr>\n` +
     `${t(language, 'messages.examples')}:\n` +
     `  /list income\n` +
     `  /list outcome\n` +
-    `  /list investments`
+    `  /list investments\n` +
+    `  /list habit`
   );
 });
 
@@ -522,17 +562,84 @@ bot.command('view', async (ctx) => {
     return ctx.reply(t(language, 'messages.pleaseStart'));
   }
   
-  const searchTerm = ctx.message.text.substring('/view'.length).trim();
+  const searchText = ctx.message.text.substring('/view'.length).trim();
   
-  if (!searchTerm) {
+  if (!searchText) {
     return ctx.reply(
-      `${t(language, 'messages.usage')}: /view <description>\n` +
+      `${t(language, 'messages.usage')}: /view <description> or /view habit <name>\n` +
       `${t(language, 'messages.examples')}:\n` +
       `  /view uber\n` +
       `  /view salario\n` +
-      `  /view cdb`
+      `  /view cdb\n` +
+      `  /view habit treino`
     );
   }
+  
+  // Check if it's a habit view: /view habit <name>
+  const parts = searchText.split(/\s+/);
+  if (parts.length >= 2 && parts[0].toLowerCase() === 'habit') {
+    const habitName = parts.slice(1).join(' ');
+    const habit = await findHabitByName(user.id, habitName);
+    
+    if (!habit) {
+      return ctx.reply(
+        language === 'pt'
+          ? `❌ Hábito "${habitName}" não encontrado`
+          : `❌ Habit "${habitName}" not found`
+      );
+    }
+    
+    // Get habit stats for current year
+    const timezone = user.timezone || 'America/Sao_Paulo';
+    const now = nowInTimezone(timezone);
+    const currentYear = now.getFullYear();
+    const stats = await getHabitStats(habit.id, currentYear, timezone);
+    
+    // Get recent logs
+    const recentLogs = await getHabitLogs(habit.id, undefined, undefined);
+    
+    let message = language === 'pt'
+      ? `🏋️ Hábito: ${habit.name}\n\n`
+      : `🏋️ Habit: ${habit.name}\n\n`;
+    
+    message += language === 'pt'
+      ? `📅 Frequência: ${habit.frequency_type === 'daily' ? 'Diário' : `${habit.frequency_value || 'N/A'}x por semana`}\n`
+      : `📅 Frequency: ${habit.frequency_type === 'daily' ? 'Daily' : `${habit.frequency_value || 'N/A'}x per week`}\n`;
+    
+    if (stats.completedDays > 0) {
+      message += language === 'pt'
+        ? `📊 Dias completados este ano: ${stats.completedDays}\n`
+        : `📊 Days completed this year: ${stats.completedDays}\n`;
+      
+      message += language === 'pt'
+        ? `📈 Porcentagem: ${stats.percentage.toFixed(1)}%\n`
+        : `📈 Percentage: ${stats.percentage.toFixed(1)}%\n`;
+      
+      if (stats.streak > 0) {
+        message += language === 'pt'
+          ? `🔥 Sequência atual: ${stats.streak} dias\n`
+          : `🔥 Current streak: ${stats.streak} days\n`;
+      }
+      
+      if (recentLogs.length > 0) {
+        const lastLog = recentLogs[0];
+        const lastDate = fromUTC(new Date(lastLog.date), timezone);
+        message += language === 'pt'
+          ? `📅 Último registro: ${format(lastDate, 'dd/MM/yyyy')}\n`
+          : `📅 Last log: ${format(lastDate, 'dd/MM/yyyy')}\n`;
+      }
+    } else {
+      message += language === 'pt'
+        ? `📊 Nenhum registro ainda\n`
+        : `📊 No logs yet\n`;
+    }
+    
+    await ctx.reply(message);
+    return;
+  }
+  
+  // Regular search in expenses, incomes, investments
+  const searchTerm = searchText;
   
   // Search in expenses
   const expenses = await findExpensesByDescription(user.id, searchTerm, 5);
@@ -541,7 +648,13 @@ bot.command('view', async (ctx) => {
   // Search in investments
   const investments = await findInvestmentsByName(user.id, searchTerm, 5);
   
-  if (expenses.length === 0 && incomes.length === 0 && investments.length === 0) {
+  // Search in OKRs (objectives)
+  const objectives = await getObjectivesByUser(user.id);
+  const matchingObjectives = objectives.filter(obj => 
+    obj.title.toLowerCase().includes(searchTerm.toLowerCase())
+  ).slice(0, 5);
+  
+  if (expenses.length === 0 && incomes.length === 0 && investments.length === 0 && matchingObjectives.length === 0) {
     return ctx.reply(
       language === 'pt' 
         ? `❌ Nenhum resultado encontrado para "${searchTerm}"`
@@ -576,6 +689,14 @@ bot.command('view', async (ctx) => {
     for (const investment of investments) {
       const currentValue = investment.current_value ? ` (R$ ${parseFloat(String(investment.current_value)).toFixed(2)})` : '';
       message += `  • ${investment.name} - ${investment.type} - R$ ${parseFloat(String(investment.amount)).toFixed(2)}${currentValue}\n`;
+    }
+    message += '\n';
+  }
+  
+  if (matchingObjectives.length > 0) {
+    message += language === 'pt' ? `🎯 OKRs:\n` : `🎯 OKRs:\n`;
+    for (const objective of matchingObjectives) {
+      message += `  • ${objective.title} (ID: ${objective.id})\n`;
     }
   }
   
