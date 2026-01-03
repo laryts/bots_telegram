@@ -8,6 +8,7 @@ export interface User {
   last_name?: string;
   referral_code: string;
   referred_by?: string;
+  timezone?: string;
   created_at: Date;
 }
 
@@ -16,15 +17,16 @@ export async function createUser(
   username?: string,
   firstName?: string,
   lastName?: string,
-  referredBy?: string
+  referredBy?: string,
+  timezone: string = 'America/Sao_Paulo'
 ): Promise<User> {
   const referralCode = generateReferralCode();
   
   const result = await pool.query(
-    `INSERT INTO users (telegram_id, username, first_name, last_name, referral_code, referred_by)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO users (telegram_id, username, first_name, last_name, referral_code, referred_by, timezone)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING *`,
-    [telegramId, username, firstName, lastName, referralCode, referredBy]
+    [telegramId, username, firstName, lastName, referralCode, referredBy, timezone]
   );
   
   return result.rows[0];

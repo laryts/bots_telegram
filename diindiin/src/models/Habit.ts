@@ -1,4 +1,6 @@
 import { pool } from '../config/database';
+import { toUTC, fromUTC } from '../utils/timezone';
+import { format } from 'date-fns-tz';
 
 export interface Habit {
   id: number;
@@ -64,16 +66,40 @@ export async function findHabitByName(userId: number, name: string): Promise<Hab
   return result.rows[0] || null;
 }
 
+async function getUserTimezoneByHabitId(habitId: number): Promise<string> {
+  const result = await pool.query(
+    `SELECT u.timezone 
+     FROM users u 
+     INNER JOIN habits h ON h.user_id = u.id 
+     WHERE h.id = $1`,
+    [habitId]
+  );
+  return result.rows[0]?.timezone || 'America/Sao_Paulo';
+}
+
 export async function logHabit(
   habitId: number,
   date: Date,
   value?: number,
-  notes?: string
+  notes?: string,
+  timezone?: string
 ): Promise<HabitLog> {
+  // Get user timezone if not provided
+  if (!timezone) {
+    timezone = await getUserTimezoneByHabitId(habitId);
+  }
+  
+  // Extract date components in user timezone
+  // Use format to get the date string in the user's timezone
+  // This ensures we get the correct date even if the Date object was created in a different timezone
+  const dateStr = format(date, 'yyyy-MM-dd', { timeZone: timezone });
+  
   // Check if log already exists for this date
   const existing = await pool.query(
-    'SELECT * FROM habit_logs WHERE habit_id = $1 AND date = $2',
-    [habitId, date]
+    `SELECT * FROM habit_logs 
+     WHERE habit_id = $1 
+     AND date = $2`,
+    [habitId, dateStr]
   );
 
   if (existing.rows.length > 0) {
@@ -105,12 +131,12 @@ export async function logHabit(
     return existing.rows[0];
   }
 
-  // Create new log
+  // Create new log with date string (DATE type, not TIMESTAMP)
   const result = await pool.query(
     `INSERT INTO habit_logs (habit_id, date, value, notes)
      VALUES ($1, $2, $3, $4)
      RETURNING *`,
-    [habitId, date, value, notes]
+    [habitId, dateStr, value, notes]
   );
   
   return result.rows[0];
@@ -141,7 +167,9 @@ export async function getHabitLogs(
   return result.rows;
 }
 
-export async function getHabitYearlyCount(habitId: number, year: number): Promise<number> {
+export async function getHabitYearlyCount(habitId: number, year: number, timezone?: string): Promise<number> {
+  // The date column is already stored as DATE in the user's timezone
+  // So we can directly query by year
   const result = await pool.query(
     `SELECT COUNT(*) as count
      FROM habit_logs
@@ -150,43 +178,71 @@ export async function getHabitYearlyCount(habitId: number, year: number): Promis
     [habitId, year]
   );
   
-  return parseInt(result.rows[0].count) || 0;
+  return parseInt(result.rows[0]?.count || '0', 10);
 }
 
-export async function getAllHabitsYearlyReview(userId: number, year: number): Promise<Array<{ habit: Habit; count: number }>> {
+export async function getAllHabitsYearlyReview(userId: number, year: number, timezone?: string): Promise<Array<{ habit: Habit; count: number }>> {
+  // Get user timezone if not provided
+  if (!timezone) {
+    const userResult = await pool.query('SELECT timezone FROM users WHERE id = $1', [userId]);
+    timezone = userResult.rows[0]?.timezone || 'America/Sao_Paulo';
+  }
+  
   const habits = await getHabitsByUser(userId);
   const review: Array<{ habit: Habit; count: number }> = [];
 
   for (const habit of habits) {
-    const count = await getHabitYearlyCount(habit.id, year);
+    const count = await getHabitYearlyCount(habit.id, year, timezone);
     review.push({ habit, count });
   }
 
   return review.sort((a, b) => b.count - a.count);
 }
 
-export async function getHabitStats(habitId: number, year: number): Promise<{
+export async function getHabitStats(habitId: number, year: number, timezone?: string): Promise<{
   totalDays: number;
   completedDays: number;
   percentage: number;
   streak: number;
 }> {
+  // Get user timezone if not provided
+  if (!timezone) {
+    timezone = await getUserTimezoneByHabitId(habitId);
+  }
+  
   const totalDays = year % 4 === 0 ? 366 : 365;
-  const completedDays = await getHabitYearlyCount(habitId, year);
+  const completedDays = await getHabitYearlyCount(habitId, year, timezone);
   const percentage = totalDays > 0 ? (completedDays / totalDays) * 100 : 0;
 
-  // Calculate current streak
-  const today = new Date();
+  // Calculate current streak in user timezone
+  const { nowInTimezone } = await import('../utils/timezone');
+  const today = nowInTimezone(timezone);
   const currentYear = today.getFullYear();
   let streak = 0;
 
   if (year === currentYear) {
-    const logs = await getHabitLogs(habitId, new Date(year, 0, 1), today);
-    const logDates = new Set(logs.map(log => new Date(log.date).toDateString()));
+    // Get all logs for the year (date column is already in user timezone as DATE type)
+    const result = await pool.query(
+      `SELECT date FROM habit_logs 
+       WHERE habit_id = $1 
+       AND EXTRACT(YEAR FROM date) = $2
+       ORDER BY date DESC`,
+      [habitId, year]
+    );
+    
+    // Create a set of date strings (YYYY-MM-DD format)
+    const logDates = new Set(
+      result.rows.map(row => {
+        // row.date is already a DATE, convert to string
+        const dateObj = new Date(row.date);
+        return `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+      })
+    );
     
     let checkDate = new Date(today);
     while (checkDate.getFullYear() === year) {
-      if (logDates.has(checkDate.toDateString())) {
+      const dateStr = `${checkDate.getFullYear()}-${String(checkDate.getMonth() + 1).padStart(2, '0')}-${String(checkDate.getDate()).padStart(2, '0')}`;
+      if (logDates.has(dateStr)) {
         streak++;
         checkDate.setDate(checkDate.getDate() - 1);
       } else {

@@ -1,4 +1,5 @@
 import { pool } from '../config/database';
+import { toUTC, fromUTC, nowInTimezone } from '../utils/timezone';
 
 export interface Income {
   id: number;
@@ -14,13 +15,24 @@ export async function createIncome(
   userId: number,
   amount: number,
   description: string,
-  category: string
+  category: string,
+  timezone?: string
 ): Promise<Income> {
+  // Get user timezone if not provided
+  if (!timezone) {
+    const userResult = await pool.query('SELECT timezone FROM users WHERE id = $1', [userId]);
+    timezone = userResult.rows[0]?.timezone || 'America/Sao_Paulo';
+  }
+  
+  // Get current date in user timezone, then convert to UTC
+  const nowInUserTz = nowInTimezone(timezone);
+  const utcDate = toUTC(nowInUserTz, timezone);
+  
   const result = await pool.query(
     `INSERT INTO incomes (user_id, amount, description, category, date)
-     VALUES ($1, $2, $3, $4, NOW())
+     VALUES ($1, $2, $3, $4, $5)
      RETURNING *`,
-    [userId, amount, description, category]
+    [userId, amount, description, category, utcDate]
   );
   
   if (!result.rows[0]) {
@@ -52,18 +64,36 @@ export async function getIncomesByUser(
   return result.rows;
 }
 
-export async function getMonthlyIncomes(userId: number, year: number, month: number): Promise<Income[]> {
+export async function getMonthlyIncomes(userId: number, year: number, month: number, timezone?: string): Promise<Income[]> {
   try {
+    // Get user timezone if not provided
+    if (!timezone) {
+      const userResult = await pool.query('SELECT timezone FROM users WHERE id = $1', [userId]);
+      timezone = userResult.rows[0]?.timezone || 'America/Sao_Paulo';
+    }
+    
+    // Convert month boundaries to UTC for comparison
+    const monthStr = String(month).padStart(2, '0');
+    const startOfMonth = toUTC(new Date(`${year}-${monthStr}-01T00:00:00`), timezone);
+    const endOfMonth = toUTC(new Date(`${year}-${monthStr}-${new Date(year, month, 0).getDate()}T23:59:59`), timezone);
+    
+    // Get all incomes in the UTC range, then filter by month/year in user timezone
     const result = await pool.query(
       `SELECT * FROM incomes 
        WHERE user_id = $1 
-       AND EXTRACT(YEAR FROM date) = $2 
-       AND EXTRACT(MONTH FROM date) = $3
+       AND date >= $2 
+       AND date <= $3
        ORDER BY date DESC`,
-      [userId, year, month]
+      [userId, startOfMonth, endOfMonth]
     );
     
-    return result.rows;
+    // Filter by month/year in user timezone
+    const filtered = result.rows.filter(row => {
+      const zonedDate = fromUTC(new Date(row.date), timezone!);
+      return zonedDate.getFullYear() === year && zonedDate.getMonth() + 1 === month;
+    });
+    
+    return filtered;
   } catch (error: any) {
     // If table doesn't exist, return empty array
     if (error?.code === '42P01' || error?.message?.includes('does not exist')) {
@@ -114,18 +144,17 @@ export async function getIncomesByCategory(
   }
 }
 
-export async function getTotalIncomesByMonth(userId: number, year: number, month: number): Promise<number> {
+export async function getTotalIncomesByMonth(userId: number, year: number, month: number, timezone?: string): Promise<number> {
   try {
-    const result = await pool.query(
-      `SELECT COALESCE(SUM(amount), 0) as total
-       FROM incomes
-       WHERE user_id = $1
-       AND EXTRACT(YEAR FROM date) = $2
-       AND EXTRACT(MONTH FROM date) = $3`,
-      [userId, year, month]
-    );
+    // Get user timezone if not provided
+    if (!timezone) {
+      const userResult = await pool.query('SELECT timezone FROM users WHERE id = $1', [userId]);
+      timezone = userResult.rows[0]?.timezone || 'America/Sao_Paulo';
+    }
     
-    return parseFloat(result.rows[0]?.total || '0');
+    // Use getMonthlyIncomes and sum the amounts
+    const incomes = await getMonthlyIncomes(userId, year, month, timezone);
+    return incomes.reduce((sum, income) => sum + parseFloat(String(income.amount || 0)), 0);
   } catch (error: any) {
     // If table doesn't exist, return 0
     if (error?.code === '42P01' || error?.message?.includes('does not exist')) {

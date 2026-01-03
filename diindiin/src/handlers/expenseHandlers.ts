@@ -4,6 +4,7 @@ import { createExpense, getMonthlyExpenses, getExpensesByCategory, getTotalExpen
 import { getTotalIncomesByMonth } from '../models/Income';
 import { categorizeExpense, generateFinancialInsight } from '../services/aiService';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
+import { nowInTimezone } from '../utils/timezone';
 
 export async function handleAddExpense(ctx: Context, amount: number, description: string) {
   try {
@@ -16,7 +17,8 @@ export async function handleAddExpense(ctx: Context, amount: number, description
     // Use AI to categorize
     const category = await categorizeExpense(description);
 
-    const expense = await createExpense(user.id, amount, description, category);
+    const timezone = user.timezone || 'America/Sao_Paulo';
+    const expense = await createExpense(user.id, amount, description, category, timezone);
 
     await ctx.reply(
       `✅ Expense added!\n\n` +
@@ -38,7 +40,8 @@ export async function handleMonthlyReport(ctx: Context) {
       return ctx.reply('Please start the bot first with /start');
     }
 
-    const now = new Date();
+    const timezone = user.timezone || 'America/Sao_Paulo';
+    const now = nowInTimezone(timezone);
     const year = now.getFullYear();
     const month = now.getMonth() + 1;
 
@@ -48,15 +51,15 @@ export async function handleMonthlyReport(ctx: Context) {
     let byCategory: any[] = [];
 
     try {
-      expenses = await getMonthlyExpenses(user.id, year, month);
-      totalExpenses = await getTotalExpensesByMonth(user.id, year, month);
+      expenses = await getMonthlyExpenses(user.id, year, month, timezone);
+      totalExpenses = await getTotalExpensesByMonth(user.id, year, month, timezone);
     } catch (error) {
       console.error('Error fetching expenses:', error);
       // Continue even if expenses fail
     }
 
     try {
-      totalIncomes = await getTotalIncomesByMonth(user.id, year, month);
+      totalIncomes = await getTotalIncomesByMonth(user.id, year, month, timezone);
     } catch (error) {
       console.error('Error fetching incomes:', error);
       // If incomes table doesn't exist, set to 0
@@ -69,6 +72,12 @@ export async function handleMonthlyReport(ctx: Context) {
         startOfMonth(now),
         endOfMonth(now)
       );
+      // Double-check conversion (safety net in case model doesn't convert)
+      byCategory = byCategory.map(cat => ({
+        category: cat.category,
+        total: typeof cat.total === 'number' ? cat.total : parseFloat(String(cat.total || '0')),
+        count: typeof cat.count === 'number' ? cat.count : parseInt(String(cat.count || '0'), 10)
+      }));
     } catch (error) {
       console.error('Error fetching categories:', error);
       byCategory = [];
@@ -96,7 +105,8 @@ export async function handleMonthlyReport(ctx: Context) {
         report += `📈 By Category:\n`;
 
         for (const cat of byCategory) {
-          const catTotal = typeof cat.total === 'number' ? cat.total : parseFloat(cat.total || '0');
+          // Extra safety: ensure it's a number
+          const catTotal = typeof cat.total === 'number' ? cat.total : parseFloat(String(cat.total || '0'));
           const percentage = totalExpenses > 0 ? (catTotal / totalExpenses) * 100 : 0;
           report += `  • ${cat.category}: R$ ${catTotal.toFixed(2)} (${percentage.toFixed(1)}%)\n`;
         }
@@ -129,7 +139,8 @@ export async function handleCategories(ctx: Context) {
       return ctx.reply('Please start the bot first with /start');
     }
 
-    const now = new Date();
+    const timezone = user.timezone || 'America/Sao_Paulo';
+    const now = nowInTimezone(timezone);
     const byCategory = await getExpensesByCategory(
       user.id,
       startOfMonth(now),
@@ -143,7 +154,9 @@ export async function handleCategories(ctx: Context) {
     let message = `🏷️ Expenses by Category (${format(now, 'MMMM yyyy')}):\n\n`;
     
     for (const cat of byCategory) {
-      message += `  • ${cat.category}: R$ ${cat.total.toFixed(2)} (${cat.count} transactions)\n`;
+      const catTotal = typeof cat.total === 'number' ? cat.total : parseFloat(cat.total || '0');
+      const catCount = typeof cat.count === 'number' ? cat.count : parseInt(cat.count || '0', 10);
+      message += `  • ${cat.category}: R$ ${catTotal.toFixed(2)} (${catCount} transactions)\n`;
     }
 
     await ctx.reply(message);

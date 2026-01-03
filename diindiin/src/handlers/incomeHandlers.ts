@@ -1,8 +1,9 @@
 import { Context } from 'telegraf';
 import { getUserByTelegramId } from '../models/User';
 import { createIncome, getMonthlyIncomes, getIncomesByCategory, getTotalIncomesByMonth } from '../models/Income';
-import { categorizeExpense } from '../services/aiService';
+import { categorizeIncome } from '../services/aiService';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
+import { nowInTimezone } from '../utils/timezone';
 
 export async function handleAddIncome(ctx: Context, amount: number, description: string) {
   try {
@@ -12,10 +13,11 @@ export async function handleAddIncome(ctx: Context, amount: number, description:
       return ctx.reply('Please start the bot first with /start');
     }
 
-    // Use AI to categorize (can reuse expense categorization logic)
-    const category = await categorizeExpense(description);
+    // Use AI to categorize income
+    const category = await categorizeIncome(description);
 
-    const income = await createIncome(user.id, amount, description, category);
+    const timezone = user.timezone || 'America/Sao_Paulo';
+    const income = await createIncome(user.id, amount, description, category, timezone);
 
     await ctx.reply(
       `✅ Income added!\n\n` +
@@ -46,12 +48,13 @@ export async function handleListIncomes(ctx: Context) {
       return ctx.reply('Please start the bot first with /start');
     }
 
-    const now = new Date();
+    const timezone = user.timezone || 'America/Sao_Paulo';
+    const now = nowInTimezone(timezone);
     const year = now.getFullYear();
     const month = now.getMonth() + 1;
 
-    const incomes = await getMonthlyIncomes(user.id, year, month);
-    const total = await getTotalIncomesByMonth(user.id, year, month);
+    const incomes = await getMonthlyIncomes(user.id, year, month, timezone);
+    const total = await getTotalIncomesByMonth(user.id, year, month, timezone);
     const byCategory = await getIncomesByCategory(
       user.id,
       startOfMonth(now),

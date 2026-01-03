@@ -10,6 +10,8 @@ import {
   getHabitsByAction,
 } from '../models/Habit';
 import { format } from 'date-fns';
+import { nowInTimezone } from '../utils/timezone';
+import { zonedTimeToUtc, utcToZonedTime } from 'date-fns-tz';
 
 export async function handleAddHabit(ctx: Context, name: string, frequency: string) {
   try {
@@ -60,13 +62,19 @@ export async function handleLogHabit(ctx: Context, name: string, value?: string,
       return ctx.reply(`❌ Habit "${name}" not found. Create it first with /addhabit`);
     }
 
-    // Parse date
-    let date = new Date();
+    const timezone = user.timezone || 'America/Sao_Paulo';
+
+    // Get date in user timezone
+    let date: Date;
     if (dateStr) {
-      const parsedDate = new Date(dateStr);
-      if (!isNaN(parsedDate.getTime())) {
-        date = parsedDate;
-      }
+      // Parse date string (format YYYY-MM-DD) and create a Date object in user's timezone
+      // dateStr represents a date in the user's timezone
+      const dateWithTime = `${dateStr}T12:00:00`; // Use noon to avoid DST issues
+      // Convert from user timezone to UTC, then back to get a proper Date object
+      const utcDate = zonedTimeToUtc(dateWithTime, timezone);
+      date = utcToZonedTime(utcDate, timezone);
+    } else {
+      date = nowInTimezone(timezone);
     }
 
     // Parse value if provided
@@ -79,7 +87,7 @@ export async function handleLogHabit(ctx: Context, name: string, value?: string,
       }
     }
 
-    await logHabit(habit.id, date, numericValue);
+    await logHabit(habit.id, date, numericValue, undefined, timezone);
 
     let message = `✅ Habit logged!\n\n`;
     message += `🏋️ ${habit.name}\n`;
@@ -110,11 +118,13 @@ export async function handleListHabits(ctx: Context) {
       return ctx.reply('📊 No habits found. Create one with /addhabit');
     }
 
-    const currentYear = new Date().getFullYear();
+    const timezone = user.timezone || 'America/Sao_Paulo';
+    const now = nowInTimezone(timezone);
+    const currentYear = now.getFullYear();
     let message = `📊 Your Habits:\n\n`;
 
     for (const habit of habits) {
-      const stats = await getHabitStats(habit.id, currentYear);
+      const stats = await getHabitStats(habit.id, currentYear, timezone);
       message += `🏋️ ${habit.name}\n`;
       message += `   📅 ${stats.completedDays} days this year (${stats.percentage.toFixed(1)}%)\n`;
       if (stats.streak > 0) {
@@ -138,8 +148,10 @@ export async function handleHabitReview(ctx: Context) {
       return ctx.reply('Please start the bot first with /start');
     }
 
-    const currentYear = new Date().getFullYear();
-    const review = await getAllHabitsYearlyReview(user.id, currentYear);
+    const timezone = user.timezone || 'America/Sao_Paulo';
+    const now = nowInTimezone(timezone);
+    const currentYear = now.getFullYear();
+    const review = await getAllHabitsYearlyReview(user.id, currentYear, timezone);
 
     if (review.length === 0) {
       return ctx.reply('📊 No habits found. Create one with /addhabit');
@@ -194,8 +206,10 @@ export async function handleHabitStats(ctx: Context, name: string) {
       return ctx.reply(`❌ Habit "${name}" not found.`);
     }
 
-    const currentYear = new Date().getFullYear();
-    const stats = await getHabitStats(habit.id, currentYear);
+    const timezone = user.timezone || 'America/Sao_Paulo';
+    const now = nowInTimezone(timezone);
+    const currentYear = now.getFullYear();
+    const stats = await getHabitStats(habit.id, currentYear, timezone);
 
     let message = `📊 ${habit.name} - Statistics\n\n`;
     message += `📅 Year: ${currentYear}\n`;
@@ -222,7 +236,9 @@ export async function handleHabitProgress(ctx: Context) {
     }
 
     const habits = await getHabitsByUser(user.id);
-    const currentYear = new Date().getFullYear();
+    const timezone = user.timezone || 'America/Sao_Paulo';
+    const now = nowInTimezone(timezone);
+    const currentYear = now.getFullYear();
 
     if (habits.length === 0) {
       return ctx.reply('📊 No habits found. Create one with /addhabit');
@@ -231,7 +247,7 @@ export async function handleHabitProgress(ctx: Context) {
     let message = `📊 Habit Progress ${currentYear}:\n\n`;
 
     for (const habit of habits) {
-      const stats = await getHabitStats(habit.id, currentYear);
+      const stats = await getHabitStats(habit.id, currentYear, timezone);
       message += `🏋️ ${habit.name}\n`;
       message += `   ${stats.completedDays}/${stats.totalDays} days (${stats.percentage.toFixed(1)}%)\n`;
       if (stats.streak > 0) {

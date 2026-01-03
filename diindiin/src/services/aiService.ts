@@ -7,7 +7,7 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const CATEGORIES = [
+const EXPENSE_CATEGORIES = [
   'Food',
   'Transport',
   'Shopping',
@@ -19,6 +19,16 @@ const CATEGORIES = [
   'Other'
 ];
 
+const INCOME_CATEGORIES = [
+  'Salary',
+  'Freelance',
+  'Investment',
+  'Bonus',
+  'Rental',
+  'Business',
+  'Other'
+];
+
 export async function categorizeExpense(description: string): Promise<string> {
   try {
     const completion = await openai.chat.completions.create({
@@ -26,7 +36,7 @@ export async function categorizeExpense(description: string): Promise<string> {
       messages: [
         {
           role: 'system',
-          content: `You are a financial assistant. Categorize expenses into one of these categories: ${CATEGORIES.join(', ')}. Return only the category name, nothing else.`,
+          content: `You are a financial assistant. Categorize expenses into one of these categories: ${EXPENSE_CATEGORIES.join(', ')}. Return only the category name, nothing else.`,
         },
         {
           role: 'user',
@@ -40,13 +50,45 @@ export async function categorizeExpense(description: string): Promise<string> {
     const category = completion.choices[0]?.message?.content?.trim() || 'Other';
     
     // Validate category
-    if (CATEGORIES.includes(category)) {
+    if (EXPENSE_CATEGORIES.includes(category)) {
       return category;
     }
     
     return 'Other';
   } catch (error) {
     console.error('AI categorization error:', error);
+    return 'Other';
+  }
+}
+
+export async function categorizeIncome(description: string): Promise<string> {
+  try {
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-3.5-turbo',
+      messages: [
+        {
+          role: 'system',
+          content: `You are a financial assistant. Categorize income into one of these categories: ${INCOME_CATEGORIES.join(', ')}. Return only the category name, nothing else.`,
+        },
+        {
+          role: 'user',
+          content: `Categorize this income: "${description}"`,
+        },
+      ],
+      temperature: 0.3,
+      max_tokens: 10,
+    });
+
+    const category = completion.choices[0]?.message?.content?.trim() || 'Other';
+    
+    // Validate category
+    if (INCOME_CATEGORIES.includes(category)) {
+      return category;
+    }
+    
+    return 'Other';
+  } catch (error) {
+    console.error('AI income categorization error:', error);
     return 'Other';
   }
 }
@@ -83,7 +125,11 @@ export async function generateFinancialInsight(
   }
 }
 
-export function getCategories(): string[] {
-  return CATEGORIES;
+export function getExpenseCategories(): string[] {
+  return EXPENSE_CATEGORIES;
+}
+
+export function getIncomeCategories(): string[] {
+  return INCOME_CATEGORIES;
 }
 
