@@ -153,3 +153,28 @@ export async function getExpensesByCategoryAndMonth(
   
   return result.rows;
 }
+
+export async function findExpensesByDescription(
+  userId: number,
+  description: string,
+  limit: number = 10
+): Promise<Expense[]> {
+  const result = await pool.query(
+    `SELECT * FROM expenses 
+     WHERE user_id = $1 AND LOWER(description) LIKE LOWER($2)
+     ORDER BY date DESC
+     LIMIT $3`,
+    [userId, `%${description}%`, limit]
+  );
+  
+  return result.rows;
+}
+
+export async function deleteExpense(expenseId: number, userId: number): Promise<boolean> {
+  const result = await pool.query(
+    'DELETE FROM expenses WHERE id = $1 AND user_id = $2 RETURNING id',
+    [expenseId, userId]
+  );
+  
+  return result.rows.length > 0;
+}

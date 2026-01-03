@@ -184,3 +184,28 @@ export async function getIncomesByCategoryAndMonth(
   
   return result.rows;
 }
+
+export async function findIncomesByDescription(
+  userId: number,
+  description: string,
+  limit: number = 10
+): Promise<Income[]> {
+  const result = await pool.query(
+    `SELECT * FROM incomes 
+     WHERE user_id = $1 AND LOWER(description) LIKE LOWER($2)
+     ORDER BY date DESC
+     LIMIT $3`,
+    [userId, `%${description}%`, limit]
+  );
+  
+  return result.rows;
+}
+
+export async function deleteIncome(incomeId: number, userId: number): Promise<boolean> {
+  const result = await pool.query(
+    'DELETE FROM incomes WHERE id = $1 AND user_id = $2 RETURNING id',
+    [incomeId, userId]
+  );
+  
+  return result.rows.length > 0;
+}

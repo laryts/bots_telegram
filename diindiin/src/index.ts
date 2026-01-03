@@ -4,6 +4,11 @@ import { initDatabase } from './config/database';
 import { handleStart, handleRefer, handleHelp, handleLanguage } from './handlers/userHandlers';
 import { handleAddExpense, handleMonthlyReport, handleCategories } from './handlers/expenseHandlers';
 import { handleAddIncome, handleListIncomes } from './handlers/incomeHandlers';
+import { findExpensesByDescription, deleteExpense } from './models/Expense';
+import { findIncomesByDescription, deleteIncome } from './models/Income';
+import { findInvestmentsByName, deleteInvestment } from './models/Investment';
+import { format } from 'date-fns';
+import { fromUTC } from './utils/timezone';
 import { handleReportCSV } from './handlers/reportHandlers';
 import { handleListInvestments, handleAddInvestment, handleUpdateInvestmentValue, handleListContributions } from './handlers/investmentHandlers';
 import {
@@ -28,7 +33,7 @@ import {
   handleViewSpreadsheet,
   handleSyncSheets,
 } from './handlers/spreadsheetHandlers';
-import { getUserLanguage } from './models/User';
+import { getUserLanguage, getUserByTelegramId } from './models/User';
 import { parseCommand, parseArgs as parseArgsUtil, EntityType } from './utils/commandParser';
 import { t, Language } from './utils/i18n';
 
@@ -52,34 +57,95 @@ bot.command('refer', handleRefer);
 bot.command('language', handleLanguage);
 bot.command('idioma', handleLanguage);
 
-// Unified add command (multilingual)
+// Unified add command - simplified syntax
 bot.command('add', async (ctx) => {
+  if (!ctx.message || !('text' in ctx.message)) return;
+  
   const language = await getUserLanguage(ctx.from!.id.toString());
   const commandText = ctx.message.text.substring('/add'.length).trim();
-  const parsed = parseCommand(commandText, language);
+  const parts = commandText.split(/\s+/);
   
-  // If entity type detected, route to appropriate handler
-  if (parsed.entityType === 'income') {
-    if (parsed.args.length < 2) {
+  if (parts.length === 0) {
+    return ctx.reply(
+      `${t(language, 'messages.usage')}: /add <income|outcome|investment> <description> <amount>\n` +
+      `${t(language, 'messages.examples')}:\n` +
+      `  /add income salario 20000\n` +
+      `  /add uber 50\n` +
+      `  /add outcome uber 50\n` +
+      `  /add investment "reserva" CDB 1000`
+    );
+  }
+  
+  // Check first argument for entity type
+  const firstArg = parts[0].toLowerCase();
+  let entityType: 'income' | 'expense' | 'investment' | null = null;
+  let args: string[] = [];
+  
+  if (firstArg === 'income') {
+    entityType = 'income';
+    args = parts.slice(1);
+  } else if (firstArg === 'outcome' || firstArg === 'expense') {
+    entityType = 'expense';
+    args = parts.slice(1);
+  } else if (firstArg === 'investment') {
+    entityType = 'investment';
+    args = parts.slice(1);
+  } else {
+    // If first arg is a number, it's an expense (backward compatibility)
+    const firstArgAsNum = parseFloat(firstArg.replace(',', '.'));
+    if (!isNaN(firstArgAsNum) && firstArgAsNum > 0) {
+      entityType = 'expense';
+      args = parts; // Use all parts including the number
+    } else {
+      // Default to expense if no type specified
+      entityType = 'expense';
+      args = parts;
+    }
+  }
+  
+  // Handle income
+  if (entityType === 'income') {
+    if (args.length < 2) {
       return ctx.reply(
-        `${t(language, 'messages.usage')}: /add ${t(language, 'entities.income')} <${t(language, 'messages.amount')}> <${t(language, 'messages.description')}>\n` +
-        `${t(language, 'messages.example')}: /add ${t(language, 'entities.income')} 5000.00 ${t(language, 'messages.description')}`
+        `${t(language, 'messages.usage')}: /add income <description> <amount>\n` +
+        `${t(language, 'messages.example')}: /add income salario 20000`
       );
     }
-    const amountStr = parsed.args[0].replace(',', '.');
+    // Last arg should be amount, rest is description
+    const amountStr = args[args.length - 1].replace(',', '.');
     const amount = parseFloat(amountStr);
     if (isNaN(amount) || amount <= 0) {
       return ctx.reply(`${t(language, 'messages.invalidAmount')}\n${t(language, 'messages.example')}: 50.00 or 50,00`);
     }
-    const description = parsed.args.slice(1).join(' ');
+    const description = args.slice(0, -1).join(' ');
     await handleAddIncome(ctx, amount, description);
     return;
   }
   
-  if (parsed.entityType === 'investment') {
+  // Handle expense
+  if (entityType === 'expense') {
+    if (args.length < 2) {
+      return ctx.reply(
+        `${t(language, 'messages.usage')}: /add <description> <amount> or /add outcome <description> <amount>\n` +
+        `${t(language, 'messages.example')}: /add uber 50`
+      );
+    }
+    // Last arg should be amount, rest is description
+    const amountStr = args[args.length - 1].replace(',', '.');
+    const amount = parseFloat(amountStr);
+    if (isNaN(amount) || amount <= 0) {
+      return ctx.reply(`${t(language, 'messages.invalidAmount')}\n${t(language, 'messages.example')}: 50.00 or 50,00`);
+    }
+    const description = args.slice(0, -1).join(' ');
+    await handleAddExpense(ctx, amount, description);
+    return;
+  }
+  
+  // Handle investment
+  if (entityType === 'investment') {
     // Route to investment handler (will be handled by existing /addinvestment logic)
-    const args = parseArgsUtil(commandText);
-    if (args.length < 3) {
+    const investmentArgs = parseArgsUtil(commandText);
+    if (investmentArgs.length < 3) {
       return ctx.reply(
         `${t(language, 'messages.usage')}: /add ${t(language, 'entities.investment')} <name> <type> <${t(language, 'messages.amount')}> [current_value] [date]\n` +
         `${t(language, 'messages.examples')}:\n` +
@@ -96,23 +162,23 @@ bot.command('add', async (ctx) => {
     let dateIndex = -1;
     
     const datePattern = /^\d{4}-\d{2}-\d{2}$/;
-    for (let i = args.length - 1; i >= 0; i--) {
-      if (datePattern.test(args[i])) {
-        dateStr = args[i];
+    for (let i = investmentArgs.length - 1; i >= 0; i--) {
+      if (datePattern.test(investmentArgs[i])) {
+        dateStr = investmentArgs[i];
         dateIndex = i;
         break;
       }
     }
     
-    const maxCheckIndex = dateIndex >= 0 ? dateIndex : args.length;
+    const maxCheckIndex = dateIndex >= 0 ? dateIndex : investmentArgs.length;
     const numbers: Array<{ value: number; index: number }> = [];
     
     for (let i = maxCheckIndex - 1; i >= 0; i--) {
-      const cleaned = args[i].replace(',', '.');
+      const cleaned = investmentArgs[i].replace(',', '.');
       const numOnly = cleaned.replace(/[^\d.]/g, '');
       const parsed = parseFloat(numOnly);
       const numFormat = /^\d+([.,]\d+)?$/;
-      const cleanArg = args[i].replace(/[^\d.,]/g, '');
+      const cleanArg = investmentArgs[i].replace(/[^\d.,]/g, '');
       
       if (!isNaN(parsed) && parsed > 0 && numFormat.test(cleanArg)) {
         numbers.push({ value: parsed, index: i });
@@ -130,7 +196,7 @@ bot.command('add', async (ctx) => {
       currentValue = numbers[1].value;
     }
     
-    const nameTypeArgs = args.slice(0, amountIndex);
+    const nameTypeArgs = investmentArgs.slice(0, amountIndex);
     
     if (nameTypeArgs.length < 2) {
       return ctx.reply(`❌ ${t(language, 'messages.usage')}: /add ${t(language, 'entities.investment')} <name> <type> <${t(language, 'messages.amount')}>`);
@@ -138,7 +204,7 @@ bot.command('add', async (ctx) => {
     
     const type = nameTypeArgs[nameTypeArgs.length - 1];
     const name = nameTypeArgs.slice(0, -1).join(' ');
-    const notes = dateIndex > amountIndex ? args.slice(dateIndex + 1).join(' ') : undefined;
+    const notes = dateIndex > amountIndex ? investmentArgs.slice(dateIndex + 1).join(' ') : undefined;
     
     const purchaseDate = dateStr ? new Date(dateStr) : new Date();
     if (isNaN(purchaseDate.getTime())) {
@@ -149,26 +215,6 @@ bot.command('add', async (ctx) => {
     return;
   }
   
-  // Default: treat as expense (backward compatibility)
-  const args = ctx.message.text.split(' ').slice(1);
-  
-  if (args.length < 2) {
-    return ctx.reply(
-      `${t(language, 'messages.usage')}: /add <${t(language, 'messages.amount')}> <${t(language, 'messages.description')}>\n` +
-      `${t(language, 'messages.example')}: /add 50.00 Coffee at Starbucks\n` +
-      `${t(language, 'messages.example')}: /add 50,00 Coffee (supports comma)`
-    );
-  }
-
-  // Parse amount - support both comma and dot as decimal separator
-  let amountStr = args[0].replace(',', '.');
-  const amount = parseFloat(amountStr);
-  if (isNaN(amount) || amount <= 0) {
-    return ctx.reply(`${t(language, 'messages.invalidAmount')}\n${t(language, 'messages.example')}: 50.00 or 50,00`);
-  }
-
-  const description = args.slice(1).join(' ');
-  await handleAddExpense(ctx, amount, description);
 });
 
 // Portuguese alias for add - reuse the same logic
@@ -319,37 +365,44 @@ bot.command('incomes', handleListIncomes);
 
 // Unified list command (multilingual)
 bot.command('list', async (ctx) => {
-  const language = await getUserLanguage(ctx.from!.id.toString());
-  const commandText = ctx.message.text.substring('/list'.length).trim();
-  const parsed = parseCommand(commandText, language);
+  if (!ctx.message || !('text' in ctx.message)) return;
   
-  if (parsed.entityType === 'income') {
+  const language = await getUserLanguage(ctx.from!.id.toString());
+  const commandText = ctx.message.text.substring('/list'.length).trim().toLowerCase();
+  
+  if (commandText === 'income' || commandText === 'incomes') {
     await handleListIncomes(ctx);
     return;
   }
   
-  if (parsed.entityType === 'investment') {
+  if (commandText === 'outcome' || commandText === 'outcomes' || commandText === 'expense' || commandText === 'expenses') {
+    // List expenses - we can reuse categories or create a simple list
+    await handleCategories(ctx);
+    return;
+  }
+  
+  if (commandText === 'investment' || commandText === 'investments') {
     await handleListInvestments(ctx);
     return;
   }
   
-  if (parsed.entityType === 'habit') {
+  if (commandText === 'habit' || commandText === 'habits') {
     await handleListHabits(ctx);
     return;
   }
   
-  if (parsed.entityType === 'objective') {
+  if (commandText === 'objective' || commandText === 'objectives' || commandText === 'okr' || commandText === 'okrs') {
     await handleListOKRs(ctx);
     return;
   }
   
   // Default: show help or list all
   await ctx.reply(
-    `${t(language, 'messages.usage')}: /list <${t(language, 'entities.investment')}|${t(language, 'entities.income')}|${t(language, 'entities.habit')}|${t(language, 'entities.objective')}>\n` +
+    `${t(language, 'messages.usage')}: /list <income|outcome|investment|habit>\n` +
     `${t(language, 'messages.examples')}:\n` +
-    `  /list ${t(language, 'entities.investments')}\n` +
-    `  /list ${t(language, 'entities.incomes')}\n` +
-    `  /list ${t(language, 'entities.habits')}`
+    `  /list income\n` +
+    `  /list outcome\n` +
+    `  /list investments`
   );
 });
 
@@ -458,6 +511,135 @@ bot.command('mostrar', async (ctx) => {
   );
 });
 
+// View command - view specific items by description/name
+bot.command('view', async (ctx) => {
+  if (!ctx.message || !('text' in ctx.message)) return;
+  
+  const language = await getUserLanguage(ctx.from!.id.toString());
+  const user = await getUserByTelegramId(ctx.from!.id.toString());
+  
+  if (!user) {
+    return ctx.reply(t(language, 'messages.pleaseStart'));
+  }
+  
+  const searchTerm = ctx.message.text.substring('/view'.length).trim();
+  
+  if (!searchTerm) {
+    return ctx.reply(
+      `${t(language, 'messages.usage')}: /view <description>\n` +
+      `${t(language, 'messages.examples')}:\n` +
+      `  /view uber\n` +
+      `  /view salario\n` +
+      `  /view cdb`
+    );
+  }
+  
+  // Search in expenses
+  const expenses = await findExpensesByDescription(user.id, searchTerm, 5);
+  // Search in incomes
+  const incomes = await findIncomesByDescription(user.id, searchTerm, 5);
+  // Search in investments
+  const investments = await findInvestmentsByName(user.id, searchTerm, 5);
+  
+  if (expenses.length === 0 && incomes.length === 0 && investments.length === 0) {
+    return ctx.reply(
+      language === 'pt' 
+        ? `❌ Nenhum resultado encontrado para "${searchTerm}"`
+        : `❌ No results found for "${searchTerm}"`
+    );
+  }
+  
+  let message = language === 'pt' 
+    ? `🔍 Resultados para "${searchTerm}":\n\n`
+    : `🔍 Results for "${searchTerm}":\n\n`;
+  
+  if (expenses.length > 0) {
+    message += language === 'pt' ? `💸 Despesas:\n` : `💸 Expenses:\n`;
+    for (const expense of expenses) {
+      const date = fromUTC(new Date(expense.date), user.timezone || 'America/Sao_Paulo');
+      message += `  • R$ ${parseFloat(String(expense.amount)).toFixed(2)} - ${expense.description} (${format(date, 'dd/MM/yyyy')})\n`;
+    }
+    message += '\n';
+  }
+  
+  if (incomes.length > 0) {
+    message += language === 'pt' ? `💰 Receitas:\n` : `💰 Incomes:\n`;
+    for (const income of incomes) {
+      const date = fromUTC(new Date(income.date), user.timezone || 'America/Sao_Paulo');
+      message += `  • R$ ${parseFloat(String(income.amount)).toFixed(2)} - ${income.description} (${format(date, 'dd/MM/yyyy')})\n`;
+    }
+    message += '\n';
+  }
+  
+  if (investments.length > 0) {
+    message += language === 'pt' ? `📈 Investimentos:\n` : `📈 Investments:\n`;
+    for (const investment of investments) {
+      const currentValue = investment.current_value ? ` (R$ ${parseFloat(String(investment.current_value)).toFixed(2)})` : '';
+      message += `  • ${investment.name} - ${investment.type} - R$ ${parseFloat(String(investment.amount)).toFixed(2)}${currentValue}\n`;
+    }
+  }
+  
+  await ctx.reply(message);
+});
+
+// Delete command
+bot.command('delete', async (ctx) => {
+  if (!ctx.message || !('text' in ctx.message)) return;
+  
+  const language = await getUserLanguage(ctx.from!.id.toString());
+  const user = await getUserByTelegramId(ctx.from!.id.toString());
+  
+  if (!user) {
+    return ctx.reply(t(language, 'messages.pleaseStart'));
+  }
+  
+  const args = ctx.message.text.substring('/delete'.length).trim().split(/\s+/);
+  
+  if (args.length === 0) {
+    return ctx.reply(
+      `${t(language, 'messages.usage')}: /delete <expense|income|investment> <id>\n` +
+      `${t(language, 'messages.example')}: /delete expense 1`
+    );
+  }
+  
+  const entityType = args[0].toLowerCase();
+  const id = parseInt(args[1]);
+  
+  if (isNaN(id) || id <= 0) {
+    return ctx.reply(language === 'pt' ? '❌ ID inválido' : '❌ Invalid ID');
+  }
+  
+  let deleted = false;
+  
+  if (entityType === 'expense' || entityType === 'outcome') {
+    deleted = await deleteExpense(id, user.id);
+  } else if (entityType === 'income') {
+    deleted = await deleteIncome(id, user.id);
+  } else if (entityType === 'investment') {
+    deleted = await deleteInvestment(id, user.id);
+  } else {
+    return ctx.reply(
+      language === 'pt'
+        ? '❌ Tipo inválido. Use: expense, income ou investment'
+        : '❌ Invalid type. Use: expense, income or investment'
+    );
+  }
+  
+  if (deleted) {
+    await ctx.reply(
+      language === 'pt' 
+        ? `✅ ${entityType === 'expense' || entityType === 'outcome' ? 'Despesa' : entityType === 'income' ? 'Receita' : 'Investimento'} deletado(a) com sucesso!`
+        : `✅ ${entityType.charAt(0).toUpperCase() + entityType.slice(1)} deleted successfully!`
+    );
+  } else {
+    await ctx.reply(
+      language === 'pt'
+        ? '❌ Item não encontrado ou você não tem permissão para deletá-lo'
+        : '❌ Item not found or you do not have permission to delete it'
+    );
+  }
+});
+
 // Investment commands
 bot.command('investments', handleListInvestments);
 
@@ -556,22 +738,35 @@ bot.command('addinvestment', async (ctx) => {
   await handleAddInvestment(ctx, name, type, amount, purchaseDate, currentValue, notes);
 });
 
-// Unified update command (multilingual)
+// Unified update command - simplified syntax
 bot.command('update', async (ctx) => {
+  if (!ctx.message || !('text' in ctx.message)) return;
+  
   const language = await getUserLanguage(ctx.from!.id.toString());
   const commandText = ctx.message.text.substring('/update'.length).trim();
-  const parsed = parseCommand(commandText, language);
+  const parts = commandText.split(/\s+/);
   
-  if (parsed.entityType === 'investment') {
-    const args = parseArgs(commandText);
+  if (parts.length === 0) {
+    return ctx.reply(
+      `${t(language, 'messages.usage')}: /update <investment> <name> <type> <current_value>\n` +
+      `${t(language, 'messages.example')}: /update investment "reserva" CDB 1200`
+    );
+  }
+  
+  // Check first argument for entity type
+  const firstArg = parts[0].toLowerCase();
+  
+  if (firstArg === 'investment') {
+    const args = parts.slice(1);
     
     if (args.length < 3) {
       return ctx.reply(
-        `${t(language, 'messages.usage')}: /update ${t(language, 'entities.investment')} <name> <type> <current_value>\n` +
-        `${t(language, 'messages.example')}: /update ${t(language, 'entities.investment')} "Tesouro Direto" RendaFixa 13200.00`
+        `${t(language, 'messages.usage')}: /update investment <name> <type> <current_value>\n` +
+        `${t(language, 'messages.example')}: /update investment "reserva" CDB 1200`
       );
     }
 
+    // Last arg should be current_value
     const currentValueStr = args[args.length - 1].replace(',', '.');
     const currentValue = parseFloat(currentValueStr);
 
@@ -579,10 +774,14 @@ bot.command('update', async (ctx) => {
       return ctx.reply(t(language, 'messages.invalidValue'));
     }
 
+    // Everything before the last arg is name and type
     const nameTypeArgs = args.slice(0, -1);
     
     if (nameTypeArgs.length < 2) {
-      return ctx.reply(`❌ ${t(language, 'messages.usage')}: /update ${t(language, 'entities.investment')} <name> <type> <current_value>`);
+      return ctx.reply(
+        `${t(language, 'messages.usage')}: /update investment <name> <type> <current_value>\n` +
+        `${t(language, 'messages.example')}: /update investment "reserva" CDB 1200`
+      );
     }
 
     const type = nameTypeArgs[nameTypeArgs.length - 1];
@@ -594,7 +793,8 @@ bot.command('update', async (ctx) => {
   
   // Default: show usage
   await ctx.reply(
-    `${t(language, 'messages.usage')}: /update ${t(language, 'entities.investment')} <name> <type> <current_value>`
+    `${t(language, 'messages.usage')}: /update investment <name> <type> <current_value>\n` +
+    `${t(language, 'messages.example')}: /update investment "reserva" CDB 1200`
   );
 });
 

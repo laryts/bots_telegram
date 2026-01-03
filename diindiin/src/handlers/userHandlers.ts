@@ -130,19 +130,30 @@ export async function handleHelp(ctx: Context) {
   const helpMessage = language === 'pt' ? `
 📚 Comandos do Bot Diindiin:
 
+✨ Comandos Simplificados:
+  /add income salario 20000 - Adicionar receita
+  /add uber 50 - Adicionar despesa
+  /add outcome uber 50 - Adicionar despesa
+  /add investment "reserva" CDB 1000 - Adicionar investimento
+  /list income - Listar receitas
+  /list outcome - Listar despesas
+  /list investments - Listar investimentos
+  /view uber - Ver itens com "uber"
+  /view salario - Ver itens com "salario"
+  /update investment "reserva" CDB 1200 - Atualizar investimento
+  /delete expense 1 - Deletar despesa ID 1
+  /delete income 1 - Deletar receita ID 1
+  /delete investment 1 - Deletar investimento ID 1
+
 💰 Despesas:
-  /add <valor> <descrição> - Adicionar uma despesa
-  /adicionar <valor> <descrição> - Adicionar uma despesa
-  Exemplo: /add 50.00 Café no Starbucks
-  Exemplo: /add 50,00 Café (suporta vírgula)
+  /add <descrição> <valor> - Adicionar uma despesa
+  Exemplo: /add uber 50
+  Exemplo: /add outcome uber 50
 
 💰 Receitas:
-  /income <valor> <descrição> - Adicionar receita
-  /receita <valor> <descrição> - Adicionar receita
-  /add receita <valor> <descrição> - Adicionar receita
-  Exemplo: /income 5000.00 Salário
-  /incomes - Listar receitas do mês atual
-  /list receitas - Listar receitas
+  /add income <descrição> <valor> - Adicionar receita
+  Exemplo: /add income salario 20000
+  /list income - Listar receitas
 
 📊 Relatórios:
   /report - Ver relatório mensal no Telegram (receitas, despesas, saldo)
@@ -193,20 +204,33 @@ export async function handleHelp(ctx: Context) {
 
 ❓ Ajuda:
   /help - Mostrar esta mensagem de ajuda
-  ` : `
+    ` : `
 📚 Diindiin Bot Commands:
 
+✨ Simplified Commands:
+  /add income salario 20000 - Add income
+  /add uber 50 - Add expense
+  /add outcome uber 50 - Add expense
+  /add investment "reserva" CDB 1000 - Add investment
+  /list income - List incomes
+  /list outcome - List expenses
+  /list investments - List investments
+  /view uber - View items with "uber"
+  /view salario - View items with "salario"
+  /update investment "reserva" CDB 1200 - Update investment
+  /delete expense 1 - Delete expense ID 1
+  /delete income 1 - Delete income ID 1
+  /delete investment 1 - Delete investment ID 1
+
 💰 Expenses:
-  /add <amount> <description> - Add an expense
-  Example: /add 50.00 Coffee at Starbucks
-  Example: /add 50,00 Coffee (supports comma)
+  /add <description> <amount> - Add an expense
+  Example: /add uber 50
+  Example: /add outcome uber 50
 
 💰 Income:
-  /income <amount> <description> - Add income
-  /add income <amount> <description> - Add income
-  Example: /income 5000.00 Salary
-  /incomes - List incomes for current month
-  /list incomes - List incomes
+  /add income <description> <amount> - Add income
+  Example: /add income salario 20000
+  /list income - List incomes
 
 📊 Reports:
   /report - View monthly report in Telegram (income, expenses, balance)

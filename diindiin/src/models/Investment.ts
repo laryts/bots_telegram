@@ -34,6 +34,32 @@ export async function findInvestmentByNameAndType(
   return result.rows[0] || null;
 }
 
+export async function findInvestmentsByName(
+  userId: number,
+  name: string,
+  limit: number = 10
+): Promise<Investment[]> {
+  const result = await pool.query(
+    `SELECT DISTINCT ON (name, type)
+       i.id,
+       i.user_id,
+       i.name,
+       i.type,
+       i.amount,
+       i.current_value,
+       i.purchase_date,
+       i.notes,
+       i.created_at
+     FROM investments i
+     WHERE i.user_id = $1 AND LOWER(i.name) LIKE LOWER($2)
+     ORDER BY i.name, i.type, i.purchase_date DESC
+     LIMIT $3`,
+    [userId, `%${name}%`, limit]
+  );
+  
+  return result.rows;
+}
+
 export async function findOrCreateInvestment(
   userId: number,
   name: string,

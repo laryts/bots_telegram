@@ -1,7 +1,7 @@
 import { Language, t } from './i18n';
 
 export type EntityType = 'expense' | 'income' | 'investment' | 'habit' | 'objective' | 'keyResult' | 'action' | 'contribution';
-export type CommandAction = 'add' | 'list' | 'update' | 'show' | 'view';
+export type CommandAction = 'add' | 'list' | 'update' | 'show' | 'view' | 'delete';
 
 export interface ParsedCommand {
   action: CommandAction;
@@ -13,7 +13,7 @@ export interface ParsedCommand {
 // Keywords for entity detection in both languages
 const entityKeywords: Record<EntityType, { en: string[]; pt: string[] }> = {
   expense: {
-    en: ['expense', 'expenses', 'spending', 'spend', 'cost', 'costs', 'gasto', 'gastos'],
+    en: ['expense', 'expenses', 'spending', 'spend', 'cost', 'costs', 'outcome', 'outcomes', 'gasto', 'gastos'],
     pt: ['despesa', 'despesas', 'gasto', 'gastos', 'gastar'],
   },
   income: {
@@ -67,6 +67,10 @@ const actionKeywords: Record<CommandAction, { en: string[]; pt: string[] }> = {
   view: {
     en: ['view', 'see', 'show', 'display'],
     pt: ['ver', 'visualizar', 'mostrar', 'mostra', 'exibir'],
+  },
+  delete: {
+    en: ['delete', 'remove', 'del', 'rm'],
+    pt: ['deletar', 'deleta', 'remover', 'remove', 'excluir', 'exclui'],
   },
 };
 
