@@ -73,7 +73,7 @@ export async function handleRefer(ctx: Context) {
 
     const botUsername = ctx.botInfo?.username || 'your_bot';
     const referralLink = `https://t.me/${botUsername}?start=${user.referral_code}`;
-
+    
     await ctx.reply(
       `🔗 ${language === 'pt' ? 'Seu Link de Indicação' : 'Your Referral Link'}:\n\n${referralLink}\n\n` +
       `${language === 'pt' ? 'Compartilhe este link com amigos para convidá-los!' : 'Share this link with friends to invite them!'}`
@@ -90,7 +90,7 @@ export async function handleLanguage(ctx: Context) {
     if (!ctx.message || !('text' in ctx.message)) {
       return;
     }
-    
+
     const language = await getUserLanguage(ctx.from!.id.toString());
     const args = ctx.message.text.split(' ').slice(1);
     
@@ -102,7 +102,7 @@ export async function handleLanguage(ctx: Context) {
         `${t(language, 'messages.example')}: /language en`
       );
     }
-    
+
     const newLanguage = args[0].toLowerCase();
     if (newLanguage !== 'pt' && newLanguage !== 'en') {
       return ctx.reply(
@@ -110,12 +110,12 @@ export async function handleLanguage(ctx: Context) {
         `${t(language, 'messages.usage')}: /language <pt|en>`
       );
     }
-    
-    await updateUserLanguage(ctx.from!.id.toString(), newLanguage as Language);
+
+    await updateUserLanguage(ctx.from!.id.toString(), newLanguage);
     const langName = newLanguage === 'pt' ? 'Português' : 'English';
     await ctx.reply(
-      `${t(newLanguage as Language, 'messages.languageChanged')}\n` +
-      `${t(newLanguage as Language, 'messages.languageSetTo')}: ${langName}`
+      `${t(newLanguage, 'messages.languageChanged')}\n` +
+      `${t(newLanguage, 'messages.languageSetTo')}: ${langName}`
     );
   } catch (error) {
     console.error('Error changing language:', error);
@@ -163,6 +163,7 @@ export async function handleHelp(ctx: Context) {
 
 🏋️ Habits (Hábitos):
   /add habit <nome> <frequência>
+  /habit <nome> [data YYYY-MM-DD]
   /list habit
   /view habit <nome>
   /edit habit <id> [campo=valor]
@@ -184,6 +185,11 @@ export async function handleHelp(ctx: Context) {
 
 🤖 AI:
   /ai okr "<título>" [descrição]
+  /ai habits [pergunta]
+  /ai okrs [pergunta]
+  /ai incomes [pergunta]
+  /ai outcomes [pergunta]
+  /ai investments [pergunta]
 
 🔗 Outros:
   /start
@@ -226,6 +232,7 @@ export async function handleHelp(ctx: Context) {
 
 🏋️ Habits:
   /add habit <name> <frequency>
+  /habit <name> [date YYYY-MM-DD]
   /list habit
   /view habit <name>
   /edit habit <id> [field=value]
@@ -247,6 +254,11 @@ export async function handleHelp(ctx: Context) {
 
 🤖 AI:
   /ai okr "<title>" [description]
+  /ai habits [question]
+  /ai okrs [question]
+  /ai incomes [question]
+  /ai outcomes [question]
+  /ai investments [question]
 
 🔗 Other:
   /start
@@ -257,4 +269,3 @@ export async function handleHelp(ctx: Context) {
 
   await ctx.reply(helpMessage);
 }
-

@@ -7,13 +7,12 @@ import { handleAddIncome, handleListIncomes } from './handlers/incomeHandlers';
 import { findExpensesByDescription, deleteExpense, getExpenseById, updateExpense, getExpensesByUser } from './models/Expense';
 import { findIncomesByDescription, deleteIncome, getIncomeById, updateIncome, getIncomesByUser } from './models/Income';
 import { findInvestmentsByName, deleteInvestment, getInvestmentById, updateInvestmentValueByNameAndType, getInvestmentsByUser, getContributionById, updateContribution, deleteContribution, getContributionsByInvestment, findInvestmentByNameAndType, createInvestmentContribution } from './models/Investment';
-import { findHabitByName, getHabitLogs, getHabitById, updateHabit, getHabitsByUser, linkHabitToAction } from './models/Habit';
-import { getObjectivesByUser, getObjectiveById, updateObjective, getKeyResultById, updateKeyResult, getActionById, updateAction, findKeyResultByTitle, findActionByDescription } from './models/OKR';
+import { findHabitByName, getHabitLogs, getHabitById, updateHabit, getHabitsByUser, linkHabitToAction, getHabitStats } from './models/Habit';
+import { getObjectivesByUser, getObjectiveById, updateObjective, getKeyResultById, updateKeyResult, getActionById, updateAction, findKeyResultByTitle, findActionByDescription, createKeyResult, createAction } from './models/OKR';
 import { format } from 'date-fns';
 import { fromUTC, nowInTimezone } from './utils/timezone';
 import { handleReportCSV } from './handlers/reportHandlers';
 import { handleListInvestments, handleAddInvestment, handleUpdateInvestmentValue, handleListContributions } from './handlers/investmentHandlers';
-import { getHabitStats } from './models/Habit';
 import {
   handleAddObjective,
   handleAddKeyResult,
@@ -39,9 +38,15 @@ import {
 import { getUserLanguage, getUserByTelegramId } from './models/User';
 import { parseCommand, parseArgs as parseArgsUtil, EntityType } from './utils/commandParser';
 import { t, Language } from './utils/i18n';
-import { parseOKRFromText } from './services/aiService';
+import { parseOKRFromText, generateAIInsight } from './services/aiService';
 import { createObjective } from './models/OKR';
 import { createHabit } from './models/Habit';
+import { getKeyResultsByObjective, getActionsByKeyResult } from './models/OKR';
+import { getAllHabitsYearlyReview } from './models/Habit';
+import { getTotalExpensesByMonth, getExpensesByCategory } from './models/Expense';
+import { getTotalIncomesByMonth, getIncomesByCategory } from './models/Income';
+import { getTotalInvestments } from './models/Investment';
+import { startOfMonth, endOfMonth } from 'date-fns';
 
 dotenv.config();
 
@@ -1145,212 +1150,366 @@ bot.command('ai', async (ctx) => {
   if (!commandText) {
     return ctx.reply(
       language === 'pt'
-        ? `${t(language, 'messages.usage')}: /ai okr "título" [descrição detalhada]\n\n` +
+        ? `${t(language, 'messages.usage')}: /ai <okr|habits|okrs|incomes|outcomes|investments> [texto]\n\n` +
           `Exemplos:\n` +
-          `/ai okr "ser uma grande gostosa" com habitos de treinos (5x por semana), deita, quero chegar aos 75 hj estou com 95\n` +
-          `/ai okr "ter uma livraria"`
-        : `${t(language, 'messages.usage')}: /ai create okr "title" [detailed description]\n\n` +
+          `/ai okr "ser uma grande gostosa" com habitos de treinos (5x por semana)\n` +
+          `/ai habits "como melhorar treino"\n` +
+          `/ai outcomes "como economizar"`
+        : `${t(language, 'messages.usage')}: /ai <okr|habits|okrs|incomes|outcomes|investments> [text]\n\n` +
           `Examples:\n` +
-          `/ai create okr "be fit" with training habits (5x per week), want to reach 75kg currently at 95kg`
+          `/ai okr "be fit" with training habits\n` +
+          `/ai habits "how to improve training"\n` +
+          `/ai outcomes "how to save money"`
     );
   }
   
-  // Check if it's "okr" or "create okr" or "criar okr"
-  const lowerText = commandText.toLowerCase();
-  if (!lowerText.includes('okr')) {
-    return ctx.reply(
-      language === 'pt'
-        ? '❌ Use: /ai okr "título" [descrição]'
-        : '❌ Use: /ai okr "title" [description]'
-    );
-  }
+  // Parse command: /ai <type> [question/text]
+  const parts = commandText.split(/\s+/);
+  const type = parts[0].toLowerCase();
+  const questionOrText = parts.slice(1).join(' ').trim();
   
-  // Extract the OKR description (everything after "okr" or "create okr" or "criar okr")
-  const okrText = commandText.replace(/^(criar|create)\s+okr\s+/i, '').replace(/^okr\s+/i, '').trim();
-  
-  if (!okrText) {
-    return ctx.reply(
-      language === 'pt'
-        ? '❌ Por favor, forneça uma descrição do OKR'
-        : '❌ Please provide an OKR description'
-    );
-  }
-  
-  // Show processing message
-  const processingMsg = await ctx.reply(
-    language === 'pt'
-      ? '🤖 Processando com AI...'
-      : '🤖 Processing with AI...'
-  );
-  
-  try {
-    // Parse OKR structure from text using AI
-    const okrStructure = await parseOKRFromText(okrText, language);
+  // Handle OKR creation (existing functionality)
+  if (type === 'okr') {
+    const okrText = questionOrText;
     
-    // Create Objective
-    const objective = await createObjective(
-      user.id,
-      okrStructure.title,
-      okrStructure.description
-    );
-    
-    let resultMessage = language === 'pt'
-      ? `✅ OKR criado!\n\n🎯 ${objective.title} (ID: ${objective.id})\n\n`
-      : `✅ OKR created!\n\n🎯 ${objective.title} (ID: ${objective.id})\n\n`;
-    
-    // Create Key Results - if none provided, create a default one
-    const createdKRs: Array<{ id: number; title: string }> = [];
-    if (okrStructure.keyResults.length === 0) {
-      const { createKeyResult } = await import('./models/OKR');
-      const defaultKR = await createKeyResult(
-        objective.id,
-        language === 'pt' ? 'Progresso' : 'Progress',
-        undefined,
-        undefined
+    if (!okrText) {
+      return ctx.reply(
+        language === 'pt'
+          ? '❌ Por favor, forneça uma descrição do OKR'
+          : '❌ Please provide an OKR description'
       );
-      createdKRs.push({ id: defaultKR.id, title: defaultKR.title });
-      resultMessage += language === 'pt'
-        ? `📊 KR: ${defaultKR.title} (ID: ${defaultKR.id})\n`
-        : `📊 KR: ${defaultKR.title} (ID: ${defaultKR.id})\n`;
     }
     
-    for (const kr of okrStructure.keyResults) {
-      const { createKeyResult } = await import('./models/OKR');
-      const keyResult = await createKeyResult(
-        objective.id,
-        kr.title,
-        kr.targetValue,
-        kr.unit
-      );
-      
-      // Set current value if provided
-      if (kr.currentValue !== undefined) {
-        await updateKeyResult(keyResult.id, undefined, undefined, kr.currentValue);
-      }
-      
-      createdKRs.push({ id: keyResult.id, title: keyResult.title });
-      resultMessage += language === 'pt'
-        ? `📊 KR: ${keyResult.title} (ID: ${keyResult.id})`
-        : `📊 KR: ${keyResult.title} (ID: ${keyResult.id})`;
-      if (kr.targetValue) {
-        resultMessage += ` → ${kr.currentValue || 0}${kr.unit || ''} / ${kr.targetValue}${kr.unit || ''}`;
-      }
-      resultMessage += '\n';
-    }
+    // Show processing message
+    const processingMsg = await ctx.reply(
+      language === 'pt'
+        ? '🤖 Processando com AI...'
+        : '🤖 Processing with AI...'
+    );
     
-    const createdActions: Array<{ id: number; description: string; krTitle?: string }> = [];
-    for (const action of okrStructure.actions) {
-      // Find the KR this action belongs to
-      let keyResultId: number | null = null;
-      if (action.keyResultTitle) {
-        const matchingKR = createdKRs.find(kr => 
-          kr.title.toLowerCase().includes(action.keyResultTitle!.toLowerCase()) ||
-          action.keyResultTitle!.toLowerCase().includes(kr.title.toLowerCase())
-        );
-        if (matchingKR) {
-          keyResultId = matchingKR.id;
-        }
-      }
+    try {
+      // Parse OKR structure from text using AI
+      const okrStructure = await parseOKRFromText(okrText, language);
       
-      // If no specific KR found, use the first one (or default)
-      if (!keyResultId && createdKRs.length > 0) {
-        keyResultId = createdKRs[0].id;
-      }
-      
-      if (keyResultId) {
-        const { createAction } = await import('./models/OKR');
-        const createdAction = await createAction(keyResultId, action.description);
-        createdActions.push({ 
-          id: createdAction.id, 
-          description: createdAction.description,
-          krTitle: action.keyResultTitle
-        });
-        resultMessage += language === 'pt'
-          ? `📝 Ação: ${createdAction.description} (ID: ${createdAction.id})\n`
-          : `📝 Action: ${createdAction.description} (ID: ${createdAction.id})\n`;
-      }
-    }
-    
-    // Create Habits
-    const createdHabits: Array<{ id: number; name: string }> = [];
-    for (const habit of okrStructure.habits) {
-      const createdHabit = await createHabit(
+      // Create Objective
+      const objective = await createObjective(
         user.id,
-        habit.name,
-        habit.frequencyType,
-        habit.frequencyType === 'weekly' ? habit.frequencyValue : undefined,
-        habit.description
+        okrStructure.title,
+        okrStructure.description
       );
-      createdHabits.push({ id: createdHabit.id, name: createdHabit.name });
-      resultMessage += language === 'pt'
-        ? `🏋️ Hábito: ${createdHabit.name} (ID: ${createdHabit.id})`
-        : `🏋️ Habit: ${createdHabit.name} (ID: ${createdHabit.id})`;
-      if (habit.frequencyType === 'weekly' && habit.frequencyValue) {
-        resultMessage += ` - ${habit.frequencyValue}x por semana`;
-      } else {
-        resultMessage += language === 'pt' ? ' - Diário' : ' - Daily';
-      }
-      resultMessage += '\n';
       
-      // Link habit to action - try explicit link first, then try to match by name
-      let linked = false;
-      if (habit.linkedActionDescription && createdActions.length > 0) {
-        const matchingAction = createdActions.find(a =>
-          a.description.toLowerCase().includes(habit.linkedActionDescription!.toLowerCase()) ||
-          habit.linkedActionDescription!.toLowerCase().includes(a.description.toLowerCase())
+      let resultMessage = language === 'pt'
+        ? `✅ OKR criado!\n\n🎯 ${objective.title} (ID: ${objective.id})\n\n`
+        : `✅ OKR created!\n\n🎯 ${objective.title} (ID: ${objective.id})\n\n`;
+      
+      // Create Key Results - if none provided, create a default one
+      const createdKRs: Array<{ id: number; title: string }> = [];
+      if (okrStructure.keyResults.length === 0) {
+        const defaultKR = await createKeyResult(
+          objective.id,
+          language === 'pt' ? 'Progresso' : 'Progress',
+          undefined,
+          undefined
+        );
+        createdKRs.push({ id: defaultKR.id, title: defaultKR.title });
+        resultMessage += language === 'pt'
+          ? `📊 KR: ${defaultKR.title} (ID: ${defaultKR.id})\n`
+          : `📊 KR: ${defaultKR.title} (ID: ${defaultKR.id})\n`;
+      }
+      
+      for (const kr of okrStructure.keyResults) {
+        const keyResult = await createKeyResult(
+          objective.id,
+          kr.title,
+          kr.targetValue,
+          kr.unit
         );
         
-        if (matchingAction) {
-          await linkHabitToAction(createdHabit.id, user.id, matchingAction.id);
+        // Set current value if provided
+        if (kr.currentValue !== undefined) {
+          await updateKeyResult(keyResult.id, undefined, undefined, kr.currentValue);
+        }
+        
+        createdKRs.push({ id: keyResult.id, title: keyResult.title });
+        resultMessage += language === 'pt'
+          ? `📊 KR: ${keyResult.title} (ID: ${keyResult.id})`
+          : `📊 KR: ${keyResult.title} (ID: ${keyResult.id})`;
+        if (kr.targetValue) {
+          resultMessage += ` → ${kr.currentValue || 0}${kr.unit || ''} / ${kr.targetValue}${kr.unit || ''}`;
+        }
+        resultMessage += '\n';
+      }
+      
+      const createdActions: Array<{ id: number; description: string; krTitle?: string }> = [];
+      for (const action of okrStructure.actions) {
+        // Find the KR this action belongs to
+        let keyResultId: number | null = null;
+        if (action.keyResultTitle) {
+          const matchingKR = createdKRs.find(kr => 
+            kr.title.toLowerCase().includes(action.keyResultTitle!.toLowerCase()) ||
+            action.keyResultTitle!.toLowerCase().includes(kr.title.toLowerCase())
+          );
+          if (matchingKR) {
+            keyResultId = matchingKR.id;
+          }
+        }
+        
+        // If no specific KR found, use the first one (or default)
+        if (!keyResultId && createdKRs.length > 0) {
+          keyResultId = createdKRs[0].id;
+        }
+        
+        if (keyResultId) {
+          const createdAction = await createAction(keyResultId, action.description);
+          createdActions.push({ 
+            id: createdAction.id, 
+            description: createdAction.description,
+            krTitle: action.keyResultTitle
+          });
           resultMessage += language === 'pt'
-            ? `  🔗 Linkado à ação: ${matchingAction.description}\n`
-            : `  🔗 Linked to action: ${matchingAction.description}\n`;
-          linked = true;
+            ? `📝 Ação: ${createdAction.description} (ID: ${createdAction.id})\n`
+            : `📝 Action: ${createdAction.description} (ID: ${createdAction.id})\n`;
         }
       }
       
-      // If not linked yet, try to match habit name with action description
-      if (!linked && createdActions.length > 0) {
-        const matchingAction = createdActions.find(a => {
-          const habitNameLower = createdHabit.name.toLowerCase();
-          const actionDescLower = a.description.toLowerCase();
-          return habitNameLower.includes(actionDescLower) || 
-                 actionDescLower.includes(habitNameLower) ||
-                 habitNameLower.includes('trein') && actionDescLower.includes('trein') ||
-                 habitNameLower.includes('cardio') && actionDescLower.includes('cardio') ||
-                 habitNameLower.includes('dieta') && actionDescLower.includes('dieta') ||
-                 habitNameLower.includes('água') && actionDescLower.includes('água') ||
-                 habitNameLower.includes('agua') && actionDescLower.includes('agua');
-        });
+      // Create Habits
+      const createdHabits: Array<{ id: number; name: string }> = [];
+      for (const habit of okrStructure.habits) {
+        const createdHabit = await createHabit(
+          user.id,
+          habit.name,
+          habit.frequencyType,
+          habit.frequencyType === 'weekly' ? habit.frequencyValue : undefined,
+          habit.description
+        );
+        createdHabits.push({ id: createdHabit.id, name: createdHabit.name });
+        resultMessage += language === 'pt'
+          ? `🏋️ Hábito: ${createdHabit.name} (ID: ${createdHabit.id})`
+          : `🏋️ Habit: ${createdHabit.name} (ID: ${createdHabit.id})`;
+        if (habit.frequencyType === 'weekly' && habit.frequencyValue) {
+          resultMessage += ` - ${habit.frequencyValue}x por semana`;
+        } else {
+          resultMessage += language === 'pt' ? ' - Diário' : ' - Daily';
+        }
+        resultMessage += '\n';
         
-        if (matchingAction) {
-          await linkHabitToAction(createdHabit.id, user.id, matchingAction.id);
-          resultMessage += language === 'pt'
-            ? `  🔗 Linkado à ação: ${matchingAction.description}\n`
-            : `  🔗 Linked to action: ${matchingAction.description}\n`;
+        // Link habit to action - try explicit link first, then try to match by name
+        let linked = false;
+        if (habit.linkedActionDescription && createdActions.length > 0) {
+          const matchingAction = createdActions.find(a =>
+            a.description.toLowerCase().includes(habit.linkedActionDescription!.toLowerCase()) ||
+            habit.linkedActionDescription!.toLowerCase().includes(a.description.toLowerCase())
+          );
+          
+          if (matchingAction) {
+            await linkHabitToAction(createdHabit.id, user.id, matchingAction.id);
+            resultMessage += language === 'pt'
+              ? `  🔗 Linkado à ação: ${matchingAction.description}\n`
+              : `  🔗 Linked to action: ${matchingAction.description}\n`;
+            linked = true;
+          }
+        }
+        
+        // If not linked yet, try to match habit name with action description
+        if (!linked && createdActions.length > 0) {
+          const matchingAction = createdActions.find(a => {
+            const habitNameLower = createdHabit.name.toLowerCase();
+            const actionDescLower = a.description.toLowerCase();
+            return habitNameLower.includes(actionDescLower) || 
+                   actionDescLower.includes(habitNameLower) ||
+                   habitNameLower.includes('trein') && actionDescLower.includes('trein') ||
+                   habitNameLower.includes('cardio') && actionDescLower.includes('cardio') ||
+                   habitNameLower.includes('dieta') && actionDescLower.includes('dieta') ||
+                   habitNameLower.includes('água') && actionDescLower.includes('água') ||
+                   habitNameLower.includes('agua') && actionDescLower.includes('agua');
+          });
+          
+          if (matchingAction) {
+            await linkHabitToAction(createdHabit.id, user.id, matchingAction.id);
+            resultMessage += language === 'pt'
+              ? `  🔗 Linkado à ação: ${matchingAction.description}\n`
+              : `  🔗 Linked to action: ${matchingAction.description}\n`;
+          }
         }
       }
-    }
+      
+      // Update the processing message with results
+      await ctx.telegram.editMessageText(
+        ctx.chat!.id,
+        processingMsg.message_id,
+        undefined,
+        resultMessage
+      );
     
-    // Update the processing message with results
-    await ctx.telegram.editMessageText(
-      ctx.chat!.id,
-      processingMsg.message_id,
-      undefined,
-      resultMessage
+    } catch (error: any) {
+      console.error('AI OKR creation error:', error);
+      await ctx.telegram.editMessageText(
+        ctx.chat!.id,
+        processingMsg.message_id,
+        undefined,
+        language === 'pt'
+          ? `❌ Erro ao criar OKR: ${error.message || 'Erro desconhecido'}`
+          : `❌ Error creating OKR: ${error.message || 'Unknown error'}`
+      );
+    }
+    return;
+  }
+  
+  // Handle insights/overviews for habits, okrs, incomes, outcomes, investments
+  const insightTypes: Array<'habits' | 'okrs' | 'incomes' | 'outcomes' | 'investments'> = ['habits', 'okrs', 'incomes', 'outcomes', 'investments'];
+  
+  if (insightTypes.includes(type as any)) {
+    const processingMsg = await ctx.reply(
+      language === 'pt'
+        ? '🤖 Processando com AI...'
+        : '🤖 Processing with AI...'
     );
     
-  } catch (error: any) {
-    console.error('AI OKR creation error:', error);
-    await ctx.telegram.editMessageText(
-      ctx.chat!.id,
-      processingMsg.message_id,
-      undefined,
+    try {
+      const timezone = user.timezone || 'America/Sao_Paulo';
+      const now = nowInTimezone(timezone);
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth() + 1;
+      
+      let userData = '';
+      
+      if (type === 'habits') {
+        const habits = await getHabitsByUser(user.id);
+        const habitsReview = await getAllHabitsYearlyReview(user.id, currentYear, timezone);
+        userData = `Hábitos:\n`;
+        for (const { habit, count } of habitsReview) {
+          const stats = await getHabitStats(habit.id, currentYear, timezone);
+          userData += `- ${habit.name}: ${count} dias completados este ano (${stats.percentage.toFixed(1)}%), sequência: ${stats.streak} dias\n`;
+        }
+        if (habits.length === 0) {
+          userData += 'Nenhum hábito cadastrado ainda.\n';
+        }
+      } else if (type === 'okrs') {
+        const objectives = await getObjectivesByUser(user.id);
+        userData = `OKRs:\n`;
+        for (const objective of objectives) {
+          userData += `- ${objective.title}${objective.description ? `: ${objective.description}` : ''}\n`;
+          const keyResults = await getKeyResultsByObjective(objective.id);
+          for (const kr of keyResults) {
+            userData += `  KR: ${kr.title}`;
+            if (kr.target_value) {
+              userData += ` → ${kr.current_value || 0}${kr.unit || ''} / ${kr.target_value}${kr.unit || ''}`;
+            }
+            userData += '\n';
+            const actions = await getActionsByKeyResult(kr.id);
+            for (const action of actions) {
+              userData += `    Ação: ${action.description}${action.progress ? ` (${action.progress})` : ''}\n`;
+            }
+          }
+        }
+        if (objectives.length === 0) {
+          userData += 'Nenhum OKR cadastrado ainda.\n';
+        }
+      } else if (type === 'incomes') {
+        const incomes = await getIncomesByUser(user.id);
+        const totalThisMonth = await getTotalIncomesByMonth(user.id, currentYear, currentMonth, timezone);
+        const byCategory = await getIncomesByCategory(user.id, startOfMonth(now), endOfMonth(now));
+        userData = `Receitas:\n`;
+        userData += `Total este mês: R$ ${totalThisMonth.toFixed(2)}\n`;
+        userData += `Por categoria:\n`;
+        for (const cat of byCategory) {
+          userData += `- ${cat.category}: R$ ${cat.total.toFixed(2)} (${cat.count} transações)\n`;
+        }
+        if (incomes.length === 0) {
+          userData += 'Nenhuma receita cadastrada ainda.\n';
+        }
+      } else if (type === 'outcomes') {
+        const expenses = await getExpensesByUser(user.id);
+        const totalThisMonth = await getTotalExpensesByMonth(user.id, currentYear, currentMonth, timezone);
+        const byCategory = await getExpensesByCategory(user.id, startOfMonth(now), endOfMonth(now));
+        userData = `Despesas:\n`;
+        userData += `Total este mês: R$ ${totalThisMonth.toFixed(2)}\n`;
+        userData += `Por categoria:\n`;
+        for (const cat of byCategory) {
+          userData += `- ${cat.category}: R$ ${cat.total.toFixed(2)} (${cat.count} transações)\n`;
+        }
+        if (expenses.length === 0) {
+          userData += 'Nenhuma despesa cadastrada ainda.\n';
+        }
+      } else if (type === 'investments') {
+        const investments = await getInvestmentsByUser(user.id);
+        const totals = await getTotalInvestments(user.id);
+        userData = `Investimentos:\n`;
+        userData += `Total investido: R$ ${totals.total_invested.toFixed(2)}\n`;
+        userData += `Valor atual: R$ ${totals.total_value.toFixed(2)}\n`;
+        userData += `Investimentos:\n`;
+        for (const inv of investments) {
+          userData += `- ${inv.name} (${inv.type}): R$ ${parseFloat(String(inv.amount)).toFixed(2)}`;
+          if (inv.current_value) {
+            userData += ` → R$ ${parseFloat(String(inv.current_value)).toFixed(2)}`;
+          }
+          userData += '\n';
+        }
+        if (investments.length === 0) {
+          userData += 'Nenhum investimento cadastrado ainda.\n';
+        }
+      }
+      
+      const insight = await generateAIInsight(
+        type as 'habits' | 'okrs' | 'incomes' | 'outcomes' | 'investments',
+        userData,
+        questionOrText || undefined,
+        language
+      );
+      
+      await ctx.telegram.editMessageText(
+        ctx.chat!.id,
+        processingMsg.message_id,
+        undefined,
+        `🤖 ${insight}`
+      );
+    } catch (error: any) {
+      console.error(`AI ${type} insight error:`, error);
+      await ctx.telegram.editMessageText(
+        ctx.chat!.id,
+        processingMsg.message_id,
+        undefined,
+        language === 'pt'
+          ? `❌ Erro ao processar: ${error.message || 'Erro desconhecido'}`
+          : `❌ Error processing: ${error.message || 'Unknown error'}`
+      );
+    }
+    return;
+  }
+  
+  // Unknown type
+  await ctx.reply(
+    language === 'pt'
+      ? '❌ Tipo desconhecido. Use: okr, habits, okrs, incomes, outcomes, investments'
+      : '❌ Unknown type. Use: okr, habits, okrs, incomes, outcomes, investments'
+  );
+});
+
+// Habit command - log habit
+bot.command('habit', async (ctx) => {
+  if (!ctx.message || !('text' in ctx.message)) return;
+  
+  const language = await getUserLanguage(ctx.from!.id.toString());
+  const user = await getUserByTelegramId(ctx.from!.id.toString());
+  
+  if (!user) {
+    return ctx.reply(t(language, 'messages.pleaseStart'));
+  }
+  
+  const args = ctx.message.text.substring('/habit'.length).trim().split(/\s+/);
+  
+  if (args.length < 1) {
+    return ctx.reply(
       language === 'pt'
-        ? `❌ Erro ao okr: ${error.message || 'Erro desconhecido'}`
-        : `❌ Error creating OKR: ${error.message || 'Unknown error'}`
+        ? `${t(language, 'messages.usage')}: /habit <nome> [data YYYY-MM-DD]\n${t(language, 'messages.example')}: /habit treino\n${t(language, 'messages.example')}: /habit treino 2024-01-15`
+        : `${t(language, 'messages.usage')}: /habit <name> [date YYYY-MM-DD]\n${t(language, 'messages.example')}: /habit training\n${t(language, 'messages.example')}: /habit training 2024-01-15`
     );
   }
+  
+  const habitName = args[0];
+  const dateStr = args[1];
+  
+  await handleLogHabit(ctx, habitName, undefined, dateStr);
 });
 
 // Spreadsheet commands removed as requested - only /report, /categories, /refer remain

@@ -316,3 +316,55 @@ Example: If text mentions "train 250x a year", create:
   }
 }
 
+export async function generateAIInsight(
+  category: 'habits' | 'okrs' | 'incomes' | 'outcomes' | 'investments',
+  userData: string,
+  question?: string,
+  language: 'pt' | 'en' = 'pt'
+): Promise<string> {
+  try {
+    const systemPrompts: Record<string, string> = {
+      habits: language === 'pt'
+        ? 'Você é um especialista em hábitos e produtividade. Analise os dados fornecidos e forneça insights acionáveis e conselhos práticos. Seja específico e útil.'
+        : 'You are a habits and productivity expert. Analyze the provided data and give actionable insights and practical advice. Be specific and helpful.',
+      okrs: language === 'pt'
+        ? 'Você é um especialista em OKRs (Objectives and Key Results). Analise os dados fornecidos e forneça insights sobre progresso, ações recomendadas e estratégias para alcançar os objetivos.'
+        : 'You are an OKRs (Objectives and Key Results) expert. Analyze the provided data and provide insights on progress, recommended actions and strategies to achieve objectives.',
+      incomes: language === 'pt'
+        ? 'Você é um consultor financeiro especializado em receitas e ganhos. Analise os dados fornecidos e forneça insights sobre como aumentar a renda e gerar receitas extras.'
+        : 'You are a financial consultant specialized in income and earnings. Analyze the provided data and provide insights on how to increase income and generate extra revenue.',
+      outcomes: language === 'pt'
+        ? 'Você é um consultor financeiro especializado em despesas e economia. Analise os dados fornecidos e forneça insights sobre como economizar dinheiro e reduzir gastos desnecessários.'
+        : 'You are a financial consultant specialized in expenses and savings. Analyze the provided data and provide insights on how to save money and reduce unnecessary spending.',
+      investments: language === 'pt'
+        ? 'Você é um consultor financeiro especializado em investimentos. Analise os dados fornecidos e forneça insights e dicas sobre investimentos, estratégias e oportunidades.'
+        : 'You are a financial consultant specialized in investments. Analyze the provided data and provide insights and tips on investments, strategies and opportunities.',
+    };
+
+    const userPrompt = question
+      ? `${userData}\n\nPergunta do usuário: ${question}`
+      : `${userData}\n\nForneça um overview geral e relatório com insights e recomendações.`;
+
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: systemPrompts[category],
+        },
+        {
+          role: 'user',
+          content: userPrompt,
+        },
+      ],
+      temperature: 0.7,
+      max_tokens: 1000,
+    });
+
+    return completion.choices[0]?.message?.content?.trim() || (language === 'pt' ? 'Não foi possível gerar insights no momento.' : 'Unable to generate insights at this time.');
+  } catch (error) {
+    console.error(`AI ${category} insight generation error:`, error);
+    throw error;
+  }
+}
+
