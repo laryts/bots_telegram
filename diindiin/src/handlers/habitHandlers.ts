@@ -127,7 +127,7 @@ export async function handleListHabits(ctx: Context) {
       const stats = await getHabitStats(habit.id, currentYear, timezone);
       message += `🏋️ ${habit.name}\n`;
       message += `   📅 ${stats.completedDays} days this year (${stats.percentage.toFixed(1)}%)\n`;
-      if (stats.streak > 0) {
+      if (stats.streak > 1) {
         message += `   🔥 Streak: ${stats.streak} days\n`;
       }
       message += `\n`;
@@ -216,7 +216,7 @@ export async function handleHabitStats(ctx: Context, name: string) {
     message += `✅ Completed: ${stats.completedDays} days\n`;
     message += `📈 Total Days: ${stats.totalDays}\n`;
     message += `📊 Percentage: ${stats.percentage.toFixed(1)}%\n`;
-    if (stats.streak > 0) {
+    if (stats.streak > 1) {
       message += `🔥 Current Streak: ${stats.streak} days\n`;
     }
 
@@ -250,7 +250,7 @@ export async function handleHabitProgress(ctx: Context) {
       const stats = await getHabitStats(habit.id, currentYear, timezone);
       message += `🏋️ ${habit.name}\n`;
       message += `   ${stats.completedDays}/${stats.totalDays} days (${stats.percentage.toFixed(1)}%)\n`;
-      if (stats.streak > 0) {
+      if (stats.streak > 1) {
         message += `   🔥 Streak: ${stats.streak} days\n`;
       }
       message += `\n`;
