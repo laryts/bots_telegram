@@ -1,17 +1,19 @@
 import { Context } from 'telegraf';
-import { getUserByTelegramId } from '../models/User';
+import { getUserByTelegramId, getUserLanguage } from '../models/User';
 import { createExpense, getMonthlyExpenses, getExpensesByCategory, getTotalExpensesByMonth } from '../models/Expense';
 import { getTotalIncomesByMonth } from '../models/Income';
 import { categorizeExpense, generateFinancialInsight } from '../services/aiService';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { nowInTimezone } from '../utils/timezone';
+import { t } from '../utils/i18n';
 
 export async function handleAddExpense(ctx: Context, amount: number, description: string) {
   try {
+    const language = await getUserLanguage(ctx.from!.id.toString());
     const user = await getUserByTelegramId(ctx.from!.id.toString());
     
     if (!user) {
-      return ctx.reply('Please start the bot first with /start');
+      return ctx.reply(t(language, 'messages.pleaseStart'));
     }
 
     // Use AI to categorize
@@ -21,23 +23,25 @@ export async function handleAddExpense(ctx: Context, amount: number, description
     const expense = await createExpense(user.id, amount, description, category, timezone);
 
     await ctx.reply(
-      `✅ Expense added!\n\n` +
-      `💰 Amount: R$ ${amount.toFixed(2)}\n` +
-      `📝 Description: ${description}\n` +
-      `🏷️ Category: ${category}`
+      `${t(language, 'messages.expenseAdded')}\n\n` +
+      `💰 ${t(language, 'messages.amount')}: R$ ${amount.toFixed(2)}\n` +
+      `📝 ${t(language, 'messages.description')}: ${description}\n` +
+      `🏷️ ${t(language, 'messages.category')}: ${category}`
     );
   } catch (error) {
     console.error('Error adding expense:', error);
-    await ctx.reply('❌ Error adding expense. Please try again.');
+    const language = await getUserLanguage(ctx.from!.id.toString());
+    await ctx.reply(t(language, 'errors.addingExpense'));
   }
 }
 
 export async function handleMonthlyReport(ctx: Context) {
   try {
+    const language = await getUserLanguage(ctx.from!.id.toString());
     const user = await getUserByTelegramId(ctx.from!.id.toString());
     
     if (!user) {
-      return ctx.reply('Please start the bot first with /start');
+      return ctx.reply(t(language, 'messages.pleaseStart'));
     }
 
     const timezone = user.timezone || 'America/Sao_Paulo';
@@ -84,25 +88,35 @@ export async function handleMonthlyReport(ctx: Context) {
     }
 
     if (expenses.length === 0 && totalIncomes === 0) {
-      return ctx.reply('📊 No transactions recorded for this month.');
+      return ctx.reply(language === 'pt' ? '📊 Nenhuma transação registrada neste mês.' : '📊 No transactions recorded for this month.');
     }
 
-    let report = `📊 Monthly Report - ${format(now, 'MMMM yyyy')}\n\n`;
+    let report = language === 'pt' 
+      ? `📊 Relatório Mensal - ${format(now, 'MMMM yyyy', { locale: require('date-fns/locale/pt-BR') })}\n\n`
+      : `📊 Monthly Report - ${format(now, 'MMMM yyyy')}\n\n`;
     
     if (totalIncomes > 0) {
-      report += `💰 Income: R$ ${totalIncomes.toFixed(2)}\n`;
+      report += language === 'pt' 
+        ? `💰 Receita: R$ ${totalIncomes.toFixed(2)}\n`
+        : `💰 Income: R$ ${totalIncomes.toFixed(2)}\n`;
     }
     
-    report += `💸 Expenses: R$ ${totalExpenses.toFixed(2)}\n`;
+    report += language === 'pt'
+      ? `💸 Despesas: R$ ${totalExpenses.toFixed(2)}\n`
+      : `💸 Expenses: R$ ${totalExpenses.toFixed(2)}\n`;
     
     const balance = totalIncomes - totalExpenses;
-    report += `📊 Balance: R$ ${balance.toFixed(2)}\n`;
+    report += language === 'pt'
+      ? `📊 Saldo: R$ ${balance.toFixed(2)}\n`
+      : `📊 Balance: R$ ${balance.toFixed(2)}\n`;
     
     if (expenses.length > 0) {
-      report += `\n📝 Expense Transactions: ${expenses.length}\n`;
+      report += language === 'pt'
+        ? `\n📝 Transações de Despesas: ${expenses.length}\n`
+        : `\n📝 Expense Transactions: ${expenses.length}\n`;
       
       if (byCategory.length > 0) {
-        report += `📈 By Category:\n`;
+        report += language === 'pt' ? `📈 Por Categoria:\n` : `📈 By Category:\n`;
 
         for (const cat of byCategory) {
           // Extra safety: ensure it's a number
@@ -117,7 +131,7 @@ export async function handleMonthlyReport(ctx: Context) {
     if (byCategory.length > 0 && totalExpenses > 0) {
       try {
         const insight = await generateFinancialInsight(byCategory, totalExpenses);
-        report += `\n🤖 AI Insight:\n${insight}`;
+        report += language === 'pt' ? `\n🤖 Insight de IA:\n${insight}` : `\n🤖 AI Insight:\n${insight}`;
       } catch (error) {
         console.error('Error generating AI insight:', error);
         // Continue without insight if AI fails
@@ -127,16 +141,22 @@ export async function handleMonthlyReport(ctx: Context) {
     await ctx.reply(report);
   } catch (error) {
     console.error('Error generating report:', error);
-    await ctx.reply(`❌ Error generating report: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`);
+    const language = await getUserLanguage(ctx.from!.id.toString());
+    await ctx.reply(
+      language === 'pt'
+        ? `❌ Erro ao gerar relatório: ${error instanceof Error ? error.message : 'Erro desconhecido'}. Por favor, tente novamente.`
+        : `❌ Error generating report: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`
+    );
   }
 }
 
 export async function handleCategories(ctx: Context) {
   try {
+    const language = await getUserLanguage(ctx.from!.id.toString());
     const user = await getUserByTelegramId(ctx.from!.id.toString());
     
     if (!user) {
-      return ctx.reply('Please start the bot first with /start');
+      return ctx.reply(t(language, 'messages.pleaseStart'));
     }
 
     const timezone = user.timezone || 'America/Sao_Paulo';
@@ -148,21 +168,25 @@ export async function handleCategories(ctx: Context) {
     );
 
     if (byCategory.length === 0) {
-      return ctx.reply('📊 No expenses recorded for this month.');
+      return ctx.reply(language === 'pt' ? '📊 Nenhuma despesa registrada neste mês.' : '📊 No expenses recorded for this month.');
     }
 
-    let message = `🏷️ Expenses by Category (${format(now, 'MMMM yyyy')}):\n\n`;
+    let message = language === 'pt'
+      ? `🏷️ Despesas por Categoria (${format(now, 'MMMM yyyy', { locale: require('date-fns/locale/pt-BR') })}):\n\n`
+      : `🏷️ Expenses by Category (${format(now, 'MMMM yyyy')}):\n\n`;
     
     for (const cat of byCategory) {
       const catTotal = typeof cat.total === 'number' ? cat.total : parseFloat(cat.total || '0');
       const catCount = typeof cat.count === 'number' ? cat.count : parseInt(cat.count || '0', 10);
-      message += `  • ${cat.category}: R$ ${catTotal.toFixed(2)} (${catCount} transactions)\n`;
+      const transText = language === 'pt' ? 'transações' : 'transactions';
+      message += `  • ${cat.category}: R$ ${catTotal.toFixed(2)} (${catCount} ${transText})\n`;
     }
 
     await ctx.reply(message);
   } catch (error) {
     console.error('Error getting categories:', error);
-    await ctx.reply('❌ Error getting categories. Please try again.');
+    const language = await getUserLanguage(ctx.from!.id.toString());
+    await ctx.reply(language === 'pt' ? '❌ Erro ao obter categorias. Por favor, tente novamente.' : '❌ Error getting categories. Please try again.');
   }
 }
 

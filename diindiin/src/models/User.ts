@@ -1,4 +1,5 @@
 import { pool } from '../config/database';
+import { Language, normalizeLanguage } from '../utils/i18n';
 
 export interface User {
   id: number;
@@ -9,6 +10,7 @@ export interface User {
   referral_code: string;
   referred_by?: string;
   timezone?: string;
+  language?: string;
   created_at: Date;
 }
 
@@ -18,15 +20,17 @@ export async function createUser(
   firstName?: string,
   lastName?: string,
   referredBy?: string,
-  timezone: string = 'America/Sao_Paulo'
+  timezone: string = 'America/Sao_Paulo',
+  languageCode?: string
 ): Promise<User> {
   const referralCode = generateReferralCode();
+  const language = normalizeLanguage(languageCode);
   
   const result = await pool.query(
-    `INSERT INTO users (telegram_id, username, first_name, last_name, referral_code, referred_by, timezone)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `INSERT INTO users (telegram_id, username, first_name, last_name, referral_code, referred_by, timezone, language)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING *`,
-    [telegramId, username, firstName, lastName, referralCode, referredBy, timezone]
+    [telegramId, username, firstName, lastName, referralCode, referredBy, timezone, language]
   );
   
   return result.rows[0];
@@ -48,6 +52,21 @@ export async function getUserByReferralCode(referralCode: string): Promise<User 
   );
   
   return result.rows[0] || null;
+}
+
+export async function getUserLanguage(telegramId: string): Promise<Language> {
+  const user = await getUserByTelegramId(telegramId);
+  if (user && user.language) {
+    return user.language as Language;
+  }
+  return 'pt'; // Default to Portuguese
+}
+
+export async function updateUserLanguage(telegramId: string, language: Language): Promise<void> {
+  await pool.query(
+    'UPDATE users SET language = $1 WHERE telegram_id = $2',
+    [language, telegramId]
+  );
 }
 
 function generateReferralCode(): string {

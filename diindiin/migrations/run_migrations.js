@@ -17,7 +17,9 @@ async function runMigrations() {
     const migrations = [
       '001_initial_schema.sql',
       '002_add_okrs.sql',
-      '003_add_incomes.sql'
+      '003_add_incomes.sql',
+      '004_add_timezone.sql',
+      '005_add_investment_contributions.sql'
     ];
     
     for (const migrationFile of migrations) {
