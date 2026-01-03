@@ -7,8 +7,8 @@ import { handleAddIncome, handleListIncomes } from './handlers/incomeHandlers';
 import { findExpensesByDescription, deleteExpense, getExpenseById, updateExpense, getExpensesByUser } from './models/Expense';
 import { findIncomesByDescription, deleteIncome, getIncomeById, updateIncome, getIncomesByUser } from './models/Income';
 import { findInvestmentsByName, deleteInvestment, getInvestmentById, updateInvestmentValueByNameAndType, getInvestmentsByUser, getContributionById, updateContribution, deleteContribution, getContributionsByInvestment, findInvestmentByNameAndType, createInvestmentContribution } from './models/Investment';
-import { findHabitByName, getHabitLogs, getHabitById, updateHabit, getHabitsByUser } from './models/Habit';
-import { getObjectivesByUser, getObjectiveById, updateObjective, getKeyResultById, updateKeyResult, getActionById, updateAction } from './models/OKR';
+import { findHabitByName, getHabitLogs, getHabitById, updateHabit, getHabitsByUser, linkHabitToAction } from './models/Habit';
+import { getObjectivesByUser, getObjectiveById, updateObjective, getKeyResultById, updateKeyResult, getActionById, updateAction, findKeyResultByTitle, findActionByDescription } from './models/OKR';
 import { format } from 'date-fns';
 import { fromUTC, nowInTimezone } from './utils/timezone';
 import { handleReportCSV } from './handlers/reportHandlers';
@@ -39,6 +39,9 @@ import {
 import { getUserLanguage, getUserByTelegramId } from './models/User';
 import { parseCommand, parseArgs as parseArgsUtil, EntityType } from './utils/commandParser';
 import { t, Language } from './utils/i18n';
+import { parseOKRFromText } from './services/aiService';
+import { createObjective } from './models/OKR';
+import { createHabit } from './models/Habit';
 
 dotenv.config();
 
@@ -87,7 +90,7 @@ bot.command('add', async (ctx) => {
   
   // Check first argument for entity type
   const firstArg = parts[0].toLowerCase();
-  let entityType: 'income' | 'expense' | 'investment' | 'habit' | 'okr' | null = null;
+  let entityType: 'income' | 'expense' | 'investment' | 'habit' | 'okr' | 'kr' | 'action' | 'contribution' | null = null;
   let args: string[] = [];
   
   if (firstArg === 'income') {
@@ -104,6 +107,15 @@ bot.command('add', async (ctx) => {
     args = parts.slice(1);
   } else if (firstArg === 'okr' || firstArg === 'okrs' || firstArg === 'objective' || firstArg === 'objectives') {
     entityType = 'okr';
+    args = parts.slice(1);
+  } else if (firstArg === 'kr' || firstArg === 'keyresult') {
+    entityType = 'kr';
+    args = parts.slice(1);
+  } else if (firstArg === 'action') {
+    entityType = 'action';
+    args = parts.slice(1);
+  } else if (firstArg === 'contribution') {
+    entityType = 'contribution';
     args = parts.slice(1);
   } else {
     // If first arg is a number, it's an expense (backward compatibility)
@@ -131,9 +143,9 @@ bot.command('add', async (ctx) => {
   const amount = parseFloat(amountStr);
   if (isNaN(amount) || amount <= 0) {
       return ctx.reply(`${t(language, 'messages.invalidAmount')}\n${t(language, 'messages.example')}: 50.00 or 50,00`);
-    }
+  }
     const description = args.slice(0, -1).join(' ');
-    await handleAddIncome(ctx, amount, description);
+  await handleAddIncome(ctx, amount, description);
     return;
   }
   
@@ -258,17 +270,43 @@ bot.command('add', async (ctx) => {
   }
   
   // Handle Key Result (kr)
-  if (firstArg === 'kr' || firstArg === 'keyresult') {
+  if (entityType === 'kr') {
   if (args.length < 3) {
     return ctx.reply(
-        `${t(language, 'messages.usage')}: /add kr <objective_id> <title> [target]\n` +
-        `${t(language, 'messages.example')}: /add kr 1 "Metas planilha" 42`
+        `${t(language, 'messages.usage')}: /add kr <okr_id|okr_title> <title> [target]\n` +
+        `${t(language, 'messages.examples')}:\n` +
+        `  /add kr "ser uma grande gostosa" peso 75\n` +
+        `  /add kr 1 peso 75`
       );
     }
-    const objectiveId = parseInt(args[0]);
-    if (isNaN(objectiveId) || objectiveId <= 0) {
-      return ctx.reply(language === 'pt' ? '❌ ID do objetivo inválido' : '❌ Invalid objective ID');
+    
+    // Try to parse first arg as ID, if not, search by OKR title
+    let objectiveId: number | null = null;
+    const firstArg = args[0];
+    const parsedId = parseInt(firstArg);
+    
+    if (!isNaN(parsedId) && parsedId > 0) {
+      // It's an ID
+      objectiveId = parsedId;
+    } else {
+      // Search by OKR title
+      const objectives = await getObjectivesByUser(user.id);
+      const matching = objectives.filter(obj => 
+        obj.title.toLowerCase().includes(firstArg.toLowerCase())
+      );
+      
+      if (matching.length === 0) {
+        return ctx.reply(
+          language === 'pt'
+            ? `❌ OKR "${firstArg}" não encontrado. Use /list okr para ver os IDs.`
+            : `❌ OKR "${firstArg}" not found. Use /list okr to see IDs.`
+        );
+      }
+      
+      // Use the most recent one if multiple matches
+      objectiveId = matching[0].id;
     }
+    
     const title = args.slice(1, -1).join(' ');
     const target = args[args.length - 1];
     await handleAddKeyResult(ctx, objectiveId, title, target);
@@ -276,24 +314,46 @@ bot.command('add', async (ctx) => {
   }
   
   // Handle Action
-  if (firstArg === 'action') {
-    if (args.length < 3) {
+  if (entityType === 'action') {
+    if (args.length < 2) {
       return ctx.reply(
-        `${t(language, 'messages.usage')}: /add action <kr_id> <description>\n` +
-        `${t(language, 'messages.example')}: /add action 1 "Treinar musculação 4x por semana"`
+        `${t(language, 'messages.usage')}: /add action <kr_id|kr_title> <description>\n` +
+        `${t(language, 'messages.examples')}:\n` +
+        `  /add action "peso" "ir 250x academia"\n` +
+        `  /add action 1 "Treinar musculação 4x por semana"`
       );
     }
-    const keyResultId = parseInt(args[0]);
-    if (isNaN(keyResultId) || keyResultId <= 0) {
-      return ctx.reply(language === 'pt' ? '❌ ID do key result inválido' : '❌ Invalid key result ID');
+    
+    // Try to parse first arg as ID, if not, search by KR title
+    let keyResultId: number | null = null;
+    const firstArg = args[0];
+    const parsedId = parseInt(firstArg);
+    
+    if (!isNaN(parsedId) && parsedId > 0) {
+      // It's an ID
+      keyResultId = parsedId;
+    } else {
+      // Search by KR title
+      const keyResult = await findKeyResultByTitle(user.id, firstArg);
+      
+      if (!keyResult) {
+    return ctx.reply(
+          language === 'pt'
+            ? `❌ Key Result "${firstArg}" não encontrado. Use /list okr para ver os KRs.`
+            : `❌ Key Result "${firstArg}" not found. Use /list okr to see KRs.`
+        );
+      }
+      
+      keyResultId = keyResult.id;
     }
+    
     const description = args.slice(1).join(' ');
     await handleAddAction(ctx, keyResultId, description);
     return;
   }
   
   // Handle Contribution
-  if (firstArg === 'contribution') {
+  if (entityType === 'contribution') {
     if (args.length < 3) {
       return ctx.reply(
         `${t(language, 'messages.usage')}: /add contribution <investment_name> <investment_type> <amount> [date]\n` +
@@ -820,6 +880,109 @@ bot.command('view', async (ctx) => {
   await ctx.reply(message);
 });
 
+// Link command - link habit to action
+bot.command('link', async (ctx) => {
+  if (!ctx.message || !('text' in ctx.message)) return;
+  
+  const language = await getUserLanguage(ctx.from!.id.toString());
+  const user = await getUserByTelegramId(ctx.from!.id.toString());
+  
+  if (!user) {
+    return ctx.reply(t(language, 'messages.pleaseStart'));
+  }
+  
+  const args = ctx.message.text.substring('/link'.length).trim().split(/\s+/);
+  
+  if (args.length < 2) {
+    return ctx.reply(
+      `${t(language, 'messages.usage')}: /link habit <habit_name|habit_id> action <action_id|action_description>\n` +
+      `${t(language, 'messages.examples')}:\n` +
+      `  /link habit treino action "ir 250x academia"\n` +
+      `  /link habit 1 action 5`
+    );
+  }
+  
+  // Parse: /link habit <name|id> action <id|description>
+  if (args[0].toLowerCase() !== 'habit' || args.length < 4 || args[args.length - 2].toLowerCase() !== 'action') {
+    return ctx.reply(
+      language === 'pt'
+        ? '❌ Formato: /link habit <nome|id> action <id|descrição>'
+        : '❌ Format: /link habit <name|id> action <id|description>'
+    );
+  }
+  
+  // Extract habit identifier (name or ID)
+  const habitIdentifier = args.slice(1, args.length - 2).join(' ');
+  const actionIdentifier = args[args.length - 1];
+  
+  // Find habit
+  let habitId: number | null = null;
+  const habitIdParsed = parseInt(habitIdentifier);
+  
+  if (!isNaN(habitIdParsed) && habitIdParsed > 0) {
+    const habit = await getHabitById(habitIdParsed, user.id);
+    if (habit) {
+      habitId = habit.id;
+    }
+  } else {
+    const habit = await findHabitByName(user.id, habitIdentifier);
+    if (habit) {
+      habitId = habit.id;
+    }
+  }
+  
+  if (!habitId) {
+    return ctx.reply(
+      language === 'pt'
+        ? `❌ Hábito "${habitIdentifier}" não encontrado. Use /list habit para ver os hábitos.`
+        : `❌ Habit "${habitIdentifier}" not found. Use /list habit to see habits.`
+    );
+  }
+  
+  // Find action
+  let actionId: number | null = null;
+  const actionIdParsed = parseInt(actionIdentifier);
+  
+  if (!isNaN(actionIdParsed) && actionIdParsed > 0) {
+    const action = await getActionById(actionIdParsed);
+    if (action) {
+      actionId = action.id;
+    }
+    } else {
+    const action = await findActionByDescription(user.id, actionIdentifier);
+    if (action) {
+      actionId = action.id;
+    }
+  }
+  
+  if (!actionId) {
+    return ctx.reply(
+      language === 'pt'
+        ? `❌ Ação "${actionIdentifier}" não encontrada. Use /list okr para ver as ações.`
+        : `❌ Action "${actionIdentifier}" not found. Use /list okr to see actions.`
+    );
+  }
+  
+  // Link habit to action
+  const updated = await linkHabitToAction(habitId, user.id, actionId);
+  
+  if (updated) {
+    const habit = await getHabitById(habitId, user.id);
+    const action = await getActionById(actionId);
+    await ctx.reply(
+      language === 'pt'
+        ? `✅ Hábito linkado à ação!\n\n🏋️ ${habit?.name} (ID: ${habitId})\n📝 ${action?.description} (ID: ${actionId})`
+        : `✅ Habit linked to action!\n\n🏋️ ${habit?.name} (ID: ${habitId})\n📝 ${action?.description} (ID: ${actionId})`
+    );
+  } else {
+    await ctx.reply(
+      language === 'pt'
+        ? '❌ Erro ao linkar hábito à ação'
+        : '❌ Error linking habit to action'
+    );
+  }
+});
+
 // Delete command
 bot.command('delete', async (ctx) => {
   if (!ctx.message || !('text' in ctx.message)) return;
@@ -835,57 +998,112 @@ bot.command('delete', async (ctx) => {
   
   if (args.length === 0) {
     return ctx.reply(
-      `${t(language, 'messages.usage')}: /delete <expense|income|investment> <id>\n` +
-      `${t(language, 'messages.example')}: /delete expense 1`
+      `${t(language, 'messages.usage')}: /delete <expense|income|investment|habit|okr|kr|action> <id|name>\n` +
+      `${t(language, 'messages.examples')}:\n` +
+      `  /delete expense 1\n` +
+      `  /delete kr peso\n` +
+      `  /delete outcome uber`
     );
   }
   
   const entityType = args[0].toLowerCase();
-  const id = parseInt(args[1]);
-  
-  if (isNaN(id) || id <= 0) {
-    return ctx.reply(language === 'pt' ? '❌ ID inválido' : '❌ Invalid ID');
-  }
+  const identifier = args.slice(1).join(' '); // Can be ID or name/description
+  const id = parseInt(identifier);
   
   let deleted = false;
+  let foundId: number | null = null;
   
+  // Try to parse as ID first, if not, search by name/description
+  if (!isNaN(id) && id > 0) {
+    foundId = id;
+  } else {
+    // Search by name/description
+    if (entityType === 'expense' || entityType === 'outcome') {
+      const expenses = await findExpensesByDescription(user.id, identifier, 1);
+      if (expenses.length > 0) {
+        foundId = expenses[0].id;
+      }
+    } else if (entityType === 'income') {
+      const incomes = await findIncomesByDescription(user.id, identifier, 1);
+      if (incomes.length > 0) {
+        foundId = incomes[0].id;
+      }
+    } else if (entityType === 'investment') {
+      const investments = await findInvestmentsByName(user.id, identifier, 1);
+      if (investments.length > 0) {
+        foundId = investments[0].id;
+      }
+    } else if (entityType === 'habit') {
+      const habit = await findHabitByName(user.id, identifier);
+      if (habit) {
+        foundId = habit.id;
+      }
+    } else if (entityType === 'okr' || entityType === 'objective') {
+      const objectives = await getObjectivesByUser(user.id);
+      const matching = objectives.filter(obj => 
+        obj.title.toLowerCase().includes(identifier.toLowerCase())
+      );
+      if (matching.length > 0) {
+        foundId = matching[0].id;
+      }
+    } else if (entityType === 'kr' || entityType === 'keyresult') {
+      const keyResult = await findKeyResultByTitle(user.id, identifier);
+      if (keyResult) {
+        foundId = keyResult.id;
+      }
+    } else if (entityType === 'action') {
+      const action = await findActionByDescription(user.id, identifier);
+      if (action) {
+        foundId = action.id;
+      }
+    }
+    
+    if (!foundId) {
+      return ctx.reply(
+        language === 'pt'
+          ? `❌ ${entityType} "${identifier}" não encontrado(a). Use /list ${entityType} para ver os IDs.`
+          : `❌ ${entityType} "${identifier}" not found. Use /list ${entityType} to see IDs.`
+      );
+    }
+  }
+  
+  // Now delete using the found ID
   if (entityType === 'expense' || entityType === 'outcome') {
-    deleted = await deleteExpense(id, user.id);
+    deleted = await deleteExpense(foundId!, user.id);
   } else if (entityType === 'income') {
-    deleted = await deleteIncome(id, user.id);
+    deleted = await deleteIncome(foundId!, user.id);
   } else if (entityType === 'investment') {
-    deleted = await deleteInvestment(id, user.id);
+    deleted = await deleteInvestment(foundId!, user.id);
   } else if (entityType === 'habit') {
-    // Need to add deleteHabit function
-    const habit = await getHabitById(id, user.id);
+    const habit = await getHabitById(foundId!, user.id);
     if (habit) {
       const { pool } = await import('./config/database');
-      const result = await pool.query('DELETE FROM habits WHERE id = $1 AND user_id = $2', [id, user.id]);
+      const result = await pool.query('DELETE FROM habits WHERE id = $1 AND user_id = $2', [foundId!, user.id]);
       deleted = (result.rowCount ?? 0) > 0;
     }
   } else if (entityType === 'okr' || entityType === 'objective') {
-    const objective = await getObjectiveById(id, user.id);
+    const objective = await getObjectiveById(foundId!, user.id);
     if (objective) {
       const { pool } = await import('./config/database');
-      const result = await pool.query('DELETE FROM objectives WHERE id = $1 AND user_id = $2', [id, user.id]);
+      const result = await pool.query('DELETE FROM objectives WHERE id = $1 AND user_id = $2', [foundId!, user.id]);
       deleted = (result.rowCount ?? 0) > 0;
     }
   } else if (entityType === 'kr' || entityType === 'keyresult') {
-    const keyResult = await getKeyResultById(id);
+    const keyResult = await getKeyResultById(foundId!);
     if (keyResult) {
       const { pool } = await import('./config/database');
-      const result = await pool.query('DELETE FROM key_results WHERE id = $1', [id]);
+      const result = await pool.query('DELETE FROM key_results WHERE id = $1', [foundId!]);
       deleted = (result.rowCount ?? 0) > 0;
     }
   } else if (entityType === 'action') {
-    const action = await getActionById(id);
+    const action = await getActionById(foundId!);
     if (action) {
       const { pool } = await import('./config/database');
-      const result = await pool.query('DELETE FROM actions WHERE id = $1', [id]);
+      const result = await pool.query('DELETE FROM actions WHERE id = $1', [foundId!]);
       deleted = (result.rowCount ?? 0) > 0;
     }
   } else if (entityType === 'contribution') {
-    deleted = await deleteContribution(id, user.id);
+    deleted = await deleteContribution(foundId!, user.id);
   } else {
     return ctx.reply(
       language === 'pt'
@@ -910,6 +1128,230 @@ bot.command('delete', async (ctx) => {
 });
 
 // All old commands removed - only simplified commands remain
+
+// AI command - create OKR from natural language
+bot.command('ai', async (ctx) => {
+  if (!ctx.message || !('text' in ctx.message)) return;
+  
+  const language = await getUserLanguage(ctx.from!.id.toString());
+  const user = await getUserByTelegramId(ctx.from!.id.toString());
+  
+  if (!user) {
+    return ctx.reply(t(language, 'messages.pleaseStart'));
+  }
+  
+  const commandText = ctx.message.text.substring('/ai'.length).trim();
+  
+  if (!commandText) {
+    return ctx.reply(
+      language === 'pt'
+        ? `${t(language, 'messages.usage')}: /ai okr "título" [descrição detalhada]\n\n` +
+          `Exemplos:\n` +
+          `/ai okr "ser uma grande gostosa" com habitos de treinos (5x por semana), deita, quero chegar aos 75 hj estou com 95\n` +
+          `/ai okr "ter uma livraria"`
+        : `${t(language, 'messages.usage')}: /ai create okr "title" [detailed description]\n\n` +
+          `Examples:\n` +
+          `/ai create okr "be fit" with training habits (5x per week), want to reach 75kg currently at 95kg`
+    );
+  }
+  
+  // Check if it's "okr" or "create okr" or "criar okr"
+  const lowerText = commandText.toLowerCase();
+  if (!lowerText.includes('okr')) {
+    return ctx.reply(
+      language === 'pt'
+        ? '❌ Use: /ai okr "título" [descrição]'
+        : '❌ Use: /ai okr "title" [description]'
+    );
+  }
+  
+  // Extract the OKR description (everything after "okr" or "create okr" or "criar okr")
+  const okrText = commandText.replace(/^(criar|create)\s+okr\s+/i, '').replace(/^okr\s+/i, '').trim();
+  
+  if (!okrText) {
+    return ctx.reply(
+      language === 'pt'
+        ? '❌ Por favor, forneça uma descrição do OKR'
+        : '❌ Please provide an OKR description'
+    );
+  }
+  
+  // Show processing message
+  const processingMsg = await ctx.reply(
+    language === 'pt'
+      ? '🤖 Processando com AI...'
+      : '🤖 Processing with AI...'
+  );
+  
+  try {
+    // Parse OKR structure from text using AI
+    const okrStructure = await parseOKRFromText(okrText, language);
+    
+    // Create Objective
+    const objective = await createObjective(
+      user.id,
+      okrStructure.title,
+      okrStructure.description
+    );
+    
+    let resultMessage = language === 'pt'
+      ? `✅ OKR criado!\n\n🎯 ${objective.title} (ID: ${objective.id})\n\n`
+      : `✅ OKR created!\n\n🎯 ${objective.title} (ID: ${objective.id})\n\n`;
+    
+    // Create Key Results - if none provided, create a default one
+    const createdKRs: Array<{ id: number; title: string }> = [];
+    if (okrStructure.keyResults.length === 0) {
+      const { createKeyResult } = await import('./models/OKR');
+      const defaultKR = await createKeyResult(
+        objective.id,
+        language === 'pt' ? 'Progresso' : 'Progress',
+        undefined,
+        undefined
+      );
+      createdKRs.push({ id: defaultKR.id, title: defaultKR.title });
+      resultMessage += language === 'pt'
+        ? `📊 KR: ${defaultKR.title} (ID: ${defaultKR.id})\n`
+        : `📊 KR: ${defaultKR.title} (ID: ${defaultKR.id})\n`;
+    }
+    
+    for (const kr of okrStructure.keyResults) {
+      const { createKeyResult } = await import('./models/OKR');
+      const keyResult = await createKeyResult(
+        objective.id,
+        kr.title,
+        kr.targetValue,
+        kr.unit
+      );
+      
+      // Set current value if provided
+      if (kr.currentValue !== undefined) {
+        await updateKeyResult(keyResult.id, undefined, undefined, kr.currentValue);
+      }
+      
+      createdKRs.push({ id: keyResult.id, title: keyResult.title });
+      resultMessage += language === 'pt'
+        ? `📊 KR: ${keyResult.title} (ID: ${keyResult.id})`
+        : `📊 KR: ${keyResult.title} (ID: ${keyResult.id})`;
+      if (kr.targetValue) {
+        resultMessage += ` → ${kr.currentValue || 0}${kr.unit || ''} / ${kr.targetValue}${kr.unit || ''}`;
+      }
+      resultMessage += '\n';
+    }
+    
+    const createdActions: Array<{ id: number; description: string; krTitle?: string }> = [];
+    for (const action of okrStructure.actions) {
+      // Find the KR this action belongs to
+      let keyResultId: number | null = null;
+      if (action.keyResultTitle) {
+        const matchingKR = createdKRs.find(kr => 
+          kr.title.toLowerCase().includes(action.keyResultTitle!.toLowerCase()) ||
+          action.keyResultTitle!.toLowerCase().includes(kr.title.toLowerCase())
+        );
+        if (matchingKR) {
+          keyResultId = matchingKR.id;
+        }
+      }
+      
+      // If no specific KR found, use the first one (or default)
+      if (!keyResultId && createdKRs.length > 0) {
+        keyResultId = createdKRs[0].id;
+      }
+      
+      if (keyResultId) {
+        const { createAction } = await import('./models/OKR');
+        const createdAction = await createAction(keyResultId, action.description);
+        createdActions.push({ 
+          id: createdAction.id, 
+          description: createdAction.description,
+          krTitle: action.keyResultTitle
+        });
+        resultMessage += language === 'pt'
+          ? `📝 Ação: ${createdAction.description} (ID: ${createdAction.id})\n`
+          : `📝 Action: ${createdAction.description} (ID: ${createdAction.id})\n`;
+      }
+    }
+    
+    // Create Habits
+    const createdHabits: Array<{ id: number; name: string }> = [];
+    for (const habit of okrStructure.habits) {
+      const createdHabit = await createHabit(
+        user.id,
+        habit.name,
+        habit.frequencyType,
+        habit.frequencyType === 'weekly' ? habit.frequencyValue : undefined,
+        habit.description
+      );
+      createdHabits.push({ id: createdHabit.id, name: createdHabit.name });
+      resultMessage += language === 'pt'
+        ? `🏋️ Hábito: ${createdHabit.name} (ID: ${createdHabit.id})`
+        : `🏋️ Habit: ${createdHabit.name} (ID: ${createdHabit.id})`;
+      if (habit.frequencyType === 'weekly' && habit.frequencyValue) {
+        resultMessage += ` - ${habit.frequencyValue}x por semana`;
+      } else {
+        resultMessage += language === 'pt' ? ' - Diário' : ' - Daily';
+      }
+      resultMessage += '\n';
+      
+      // Link habit to action - try explicit link first, then try to match by name
+      let linked = false;
+      if (habit.linkedActionDescription && createdActions.length > 0) {
+        const matchingAction = createdActions.find(a =>
+          a.description.toLowerCase().includes(habit.linkedActionDescription!.toLowerCase()) ||
+          habit.linkedActionDescription!.toLowerCase().includes(a.description.toLowerCase())
+        );
+        
+        if (matchingAction) {
+          await linkHabitToAction(createdHabit.id, user.id, matchingAction.id);
+          resultMessage += language === 'pt'
+            ? `  🔗 Linkado à ação: ${matchingAction.description}\n`
+            : `  🔗 Linked to action: ${matchingAction.description}\n`;
+          linked = true;
+        }
+      }
+      
+      // If not linked yet, try to match habit name with action description
+      if (!linked && createdActions.length > 0) {
+        const matchingAction = createdActions.find(a => {
+          const habitNameLower = createdHabit.name.toLowerCase();
+          const actionDescLower = a.description.toLowerCase();
+          return habitNameLower.includes(actionDescLower) || 
+                 actionDescLower.includes(habitNameLower) ||
+                 habitNameLower.includes('trein') && actionDescLower.includes('trein') ||
+                 habitNameLower.includes('cardio') && actionDescLower.includes('cardio') ||
+                 habitNameLower.includes('dieta') && actionDescLower.includes('dieta') ||
+                 habitNameLower.includes('água') && actionDescLower.includes('água') ||
+                 habitNameLower.includes('agua') && actionDescLower.includes('agua');
+        });
+        
+        if (matchingAction) {
+          await linkHabitToAction(createdHabit.id, user.id, matchingAction.id);
+          resultMessage += language === 'pt'
+            ? `  🔗 Linkado à ação: ${matchingAction.description}\n`
+            : `  🔗 Linked to action: ${matchingAction.description}\n`;
+        }
+      }
+    }
+    
+    // Update the processing message with results
+    await ctx.telegram.editMessageText(
+      ctx.chat!.id,
+      processingMsg.message_id,
+      undefined,
+      resultMessage
+    );
+    
+  } catch (error: any) {
+    console.error('AI OKR creation error:', error);
+    await ctx.telegram.editMessageText(
+      ctx.chat!.id,
+      processingMsg.message_id,
+      undefined,
+      language === 'pt'
+        ? `❌ Erro ao okr: ${error.message || 'Erro desconhecido'}`
+        : `❌ Error creating OKR: ${error.message || 'Unknown error'}`
+    );
+  }
+});
 
 // Spreadsheet commands removed as requested - only /report, /categories, /refer remain
 

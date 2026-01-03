@@ -67,7 +67,8 @@ export async function updateHabit(
   description?: string,
   frequencyType?: string,
   frequencyValue?: number,
-  unit?: string
+  unit?: string,
+  linkedActionId?: number | null
 ): Promise<Habit | null> {
   const updates: string[] = [];
   const values: any[] = [];
@@ -93,6 +94,10 @@ export async function updateHabit(
     updates.push(`unit = $${paramCount++}`);
     values.push(unit);
   }
+  if (linkedActionId !== undefined) {
+    updates.push(`linked_action_id = $${paramCount++}`);
+    values.push(linkedActionId);
+  }
 
   if (updates.length === 0) {
     return getHabitById(habitId, userId);
@@ -108,6 +113,10 @@ export async function updateHabit(
   );
   
   return result.rows[0] || null;
+}
+
+export async function linkHabitToAction(habitId: number, userId: number, actionId: number): Promise<Habit | null> {
+  return updateHabit(habitId, userId, undefined, undefined, undefined, undefined, undefined, actionId);
 }
 
 export async function findHabitByName(userId: number, name: string): Promise<Habit | null> {

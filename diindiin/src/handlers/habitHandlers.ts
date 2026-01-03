@@ -276,14 +276,19 @@ export async function handleLinkHabitToAction(ctx: Context, habitName: string, a
       return ctx.reply(`❌ Habit "${habitName}" not found.`);
     }
 
-    // Note: This would require updating the habit model to support linking
-    // For now, we'll just acknowledge the request
-    await ctx.reply(
-      `✅ Habit linked to action!\n\n` +
-      `🏋️ ${habit.name}\n` +
-      `📝 Action ID: ${actionId}\n\n` +
-      `Note: Full linking functionality will be available in future updates.`
-    );
+    // Import linkHabitToAction from model
+    const { linkHabitToAction } = await import('../models/Habit');
+    const updated = await linkHabitToAction(habit.id, user.id, actionId);
+    
+    if (updated) {
+      await ctx.reply(
+        `✅ Habit linked to action!\n\n` +
+        `🏋️ ${habit.name}\n` +
+        `📝 Action ID: ${actionId}`
+      );
+    } else {
+      await ctx.reply('❌ Error linking habit. Please try again.');
+    }
   } catch (error) {
     console.error('Error linking habit:', error);
     await ctx.reply('❌ Error linking habit. Please try again.');

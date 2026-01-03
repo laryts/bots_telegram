@@ -127,6 +127,21 @@ export async function getKeyResultById(keyResultId: number): Promise<KeyResult |
   return result.rows[0] || null;
 }
 
+export async function findKeyResultByTitle(userId: number, title: string): Promise<KeyResult | null> {
+  // Find key result by title, checking through objectives
+  const result = await pool.query(
+    `SELECT kr.* 
+     FROM key_results kr
+     INNER JOIN objectives o ON kr.objective_id = o.id
+     WHERE o.user_id = $1 AND LOWER(kr.title) LIKE LOWER($2)
+     ORDER BY kr.created_at DESC
+     LIMIT 1`,
+    [userId, `%${title}%`]
+  );
+  
+  return result.rows[0] || null;
+}
+
 export async function getKeyResultsByObjective(objectiveId: number): Promise<KeyResult[]> {
   const result = await pool.query(
     'SELECT * FROM key_results WHERE objective_id = $1 ORDER BY created_at DESC',
@@ -201,6 +216,22 @@ export async function getActionById(actionId: number): Promise<Action | null> {
   const result = await pool.query(
     'SELECT * FROM actions WHERE id = $1',
     [actionId]
+  );
+  
+  return result.rows[0] || null;
+}
+
+export async function findActionByDescription(userId: number, description: string): Promise<Action | null> {
+  // Find action by description, checking through key results and objectives
+  const result = await pool.query(
+    `SELECT a.* 
+     FROM actions a
+     INNER JOIN key_results kr ON a.key_result_id = kr.id
+     INNER JOIN objectives o ON kr.objective_id = o.id
+     WHERE o.user_id = $1 AND LOWER(a.description) LIKE LOWER($2)
+     ORDER BY a.created_at DESC
+     LIMIT 1`,
+    [userId, `%${description}%`]
   );
   
   return result.rows[0] || null;
