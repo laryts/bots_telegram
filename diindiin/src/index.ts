@@ -92,33 +92,114 @@ bot.command('incomes', handleListIncomes);
 // Investment commands
 bot.command('investments', handleListInvestments);
 
-bot.command('addinvestment', async (ctx) => {
-  const args = ctx.message.text.split(' ').slice(1);
+// Helper function to parse command arguments, handling quoted strings
+function parseArgs(text: string): string[] {
+  const args: string[] = [];
+  let current = '';
+  let inQuotes = false;
   
-  if (args.length < 4) {
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    
+    if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if (char === ' ' && !inQuotes) {
+      if (current.trim()) {
+        args.push(current.trim());
+        current = '';
+      }
+    } else {
+      current += char;
+    }
+  }
+  
+  if (current.trim()) {
+    args.push(current.trim());
+  }
+  
+  return args;
+}
+
+bot.command('addinvestment', async (ctx) => {
+  const text = ctx.message.text;
+  const commandText = text.substring('/addinvestment'.length).trim();
+  const args = parseArgs(commandText);
+  
+  if (args.length < 3) {
     return ctx.reply(
-      'Usage: /addinvestment <name> <type> <amount> <date>\n' +
-      'Example: /addinvestment "Bitcoin" "Crypto" 1000.00 2024-01-15'
+      'Usage: /addinvestment <name> <type> <amount> [date]\n' +
+      'Examples:\n' +
+      '  /addinvestment "reserva de emergencia" CDB 84203.72\n' +
+      '  /addinvestment "reserva de emergencia" CDB 84203,72\n' +
+      '  /addinvestment Bitcoin Crypto 1000.00 2024-01-15\n' +
+      'Note: Date is optional, defaults to today. Use quotes for names with spaces.'
     );
   }
 
-  const name = args[0];
-  const type = args[1];
-  // Parse amount - support both comma and dot as decimal separator
-  let amountStr = args[2].replace(',', '.');
-  const amount = parseFloat(amountStr);
-  const dateStr = args[3];
-
-  if (isNaN(amount) || amount <= 0) {
+  // Find amount and date indices
+  let amount: number | null = null;
+  let amountIndex = -1;
+  let dateStr: string | null = null;
+  let dateIndex = -1;
+  
+  // Look for date pattern (YYYY-MM-DD) - check from the end
+  const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+  for (let i = args.length - 1; i >= 0; i--) {
+    if (datePattern.test(args[i])) {
+      dateStr = args[i];
+      dateIndex = i;
+      break;
+    }
+  }
+  
+  // Look for amount (number with comma or dot as decimal separator) - check from the end before date
+  const maxCheckIndex = dateIndex >= 0 ? dateIndex : args.length;
+  for (let i = maxCheckIndex - 1; i >= 0; i--) {
+    // Try to parse as number - replace comma with dot for parsing
+    const cleaned = args[i].replace(',', '.');
+    // Remove any non-numeric characters except dots
+    const numOnly = cleaned.replace(/[^\d.]/g, '');
+    const parsed = parseFloat(numOnly);
+    
+    // Check if it's a valid number format (digits with optional decimal part)
+    const numFormat = /^\d+([.,]\d+)?$/;
+    const cleanArg = args[i].replace(/[^\d.,]/g, '');
+    
+    if (!isNaN(parsed) && parsed > 0 && numFormat.test(cleanArg)) {
+      amount = parsed;
+      amountIndex = i;
+      break;
+    }
+  }
+  
+  if (!amount || amount <= 0) {
     return ctx.reply('❌ Invalid amount. Please provide a valid number.\nExample: 50.00 or 50,00');
   }
-
-  const purchaseDate = new Date(dateStr);
+  
+  // Everything before amount and date is name and type
+  const nameTypeArgs = args.slice(0, amountIndex);
+  
+  if (nameTypeArgs.length < 2) {
+    // If we don't have enough args, try to be more flexible
+    // Maybe the last arg before amount is the type, and everything before is the name
+    if (nameTypeArgs.length === 1) {
+      // Only one arg before amount - use it as name, and try to infer type or use a default
+      return ctx.reply('❌ Please provide both name and type for the investment.\nExample: /addinvestment "reserva de emergencia" CDB 84203,72');
+    }
+    return ctx.reply('❌ Please provide both name and type for the investment.');
+  }
+  
+  // Last arg before amount is type, everything before that is name
+  const type = nameTypeArgs[nameTypeArgs.length - 1];
+  const name = nameTypeArgs.slice(0, -1).join(' ');
+  const notes = dateIndex > amountIndex ? args.slice(dateIndex + 1).join(' ') : undefined;
+  
+  // Use provided date or default to today
+  const purchaseDate = dateStr ? new Date(dateStr) : new Date();
   if (isNaN(purchaseDate.getTime())) {
     return ctx.reply('❌ Invalid date format. Use YYYY-MM-DD');
   }
 
-  const notes = args.slice(4).join(' ') || undefined;
   await handleAddInvestment(ctx, name, type, amount, purchaseDate, notes);
 });
 
