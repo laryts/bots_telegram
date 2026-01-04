@@ -359,20 +359,28 @@ bot.command('add', async (ctx) => {
   
   // Handle Contribution
   if (entityType === 'contribution') {
-    if (args.length < 3) {
+    // Parse arguments properly handling quoted strings
+    const contributionArgs = parseArgsUtil(commandText.substring('contribution'.length).trim());
+    if (contributionArgs.length < 3) {
       return ctx.reply(
         `${t(language, 'messages.usage')}: /add contribution <investment_name> <investment_type> <amount> [date]\n` +
         `${t(language, 'messages.example')}: /add contribution "reserva" CDB 1000`
       );
     }
-    const investmentName = args[0];
-    const investmentType = args[1];
-    const amountStr = args[2].replace(',', '.');
-    const amount = parseFloat(amountStr);
-    if (isNaN(amount) || amount <= 0) {
+    const investmentName = contributionArgs[0];
+    const investmentType = contributionArgs[1];
+    const amountArg = contributionArgs[2];
+    const cleaned = amountArg.replace(',', '.');
+    const numOnly = cleaned.replace(/[^\d.]/g, '');
+    const parsed = parseFloat(numOnly);
+    const numFormat = /^\d+([.,]\d+)?$/;
+    const cleanArg = amountArg.replace(/[^\d.,]/g, '');
+    
+    if (isNaN(parsed) || parsed <= 0 || !numFormat.test(cleanArg)) {
       return ctx.reply(`${t(language, 'messages.invalidAmount')}\n${t(language, 'messages.example')}: 50.00 or 50,00`);
     }
-    const dateStr = args[3];
+    const amount = parsed;
+    const dateStr = contributionArgs[3];
     let contributionDate = new Date();
     if (dateStr) {
       const parsedDate = new Date(dateStr);
