@@ -107,7 +107,7 @@ export async function generateFinancialInsight(
       messages: [
         {
           role: 'system',
-          content: 'You are a financial advisor. Provide brief, actionable insights about spending patterns. Keep it under 100 words.',
+          content: 'You are a financial advisor. Provide brief, actionable insights about spending patterns. Be CONCISE and DIRECT. Maximum 2-3 short sentences. Keep it under 50 words.',
         },
         {
           role: 'user',
@@ -115,7 +115,7 @@ export async function generateFinancialInsight(
         },
       ],
       temperature: 0.7,
-      max_tokens: 150,
+      max_tokens: 100,
     });
 
     return completion.choices[0]?.message?.content?.trim() || 'No insights available.';
@@ -325,20 +325,20 @@ export async function generateAIInsight(
   try {
     const systemPrompts: Record<string, string> = {
       habits: language === 'pt'
-        ? 'Você é um especialista em hábitos e produtividade. Analise os dados fornecidos e forneça insights acionáveis e conselhos práticos. Seja específico e útil.'
-        : 'You are a habits and productivity expert. Analyze the provided data and give actionable insights and practical advice. Be specific and helpful.',
+        ? 'Você é um especialista em hábitos e produtividade. Analise os dados fornecidos e forneça insights acionáveis e conselhos práticos. Seja específico e útil. IMPORTANTE: Seja CONCISO e DIRETO. Máximo de 3-4 frases curtas. Evite explicações longas.'
+        : 'You are a habits and productivity expert. Analyze the provided data and give actionable insights and practical advice. Be specific and helpful. IMPORTANT: Be CONCISE and DIRECT. Maximum 3-4 short sentences. Avoid long explanations.',
       okrs: language === 'pt'
-        ? 'Você é um especialista em OKRs (Objectives and Key Results). Analise os dados fornecidos e forneça insights sobre progresso, ações recomendadas e estratégias para alcançar os objetivos.'
-        : 'You are an OKRs (Objectives and Key Results) expert. Analyze the provided data and provide insights on progress, recommended actions and strategies to achieve objectives.',
+        ? 'Você é um especialista em OKRs (Objectives and Key Results). Analise os dados fornecidos e forneça insights sobre progresso, ações recomendadas e estratégias para alcançar os objetivos. IMPORTANTE: Seja CONCISO e DIRETO. Máximo de 3-4 frases curtas. Evite explicações longas.'
+        : 'You are an OKRs (Objectives and Key Results) expert. Analyze the provided data and provide insights on progress, recommended actions and strategies to achieve objectives. IMPORTANT: Be CONCISE and DIRECT. Maximum 3-4 short sentences. Avoid long explanations.',
       incomes: language === 'pt'
-        ? 'Você é um consultor financeiro especializado em receitas e ganhos. Analise os dados fornecidos e forneça insights sobre como aumentar a renda e gerar receitas extras.'
-        : 'You are a financial consultant specialized in income and earnings. Analyze the provided data and provide insights on how to increase income and generate extra revenue.',
+        ? 'Você é um consultor financeiro especializado em receitas e ganhos. Analise os dados fornecidos e forneça insights sobre como aumentar a renda e gerar receitas extras. IMPORTANTE: Seja CONCISO e DIRETO. Máximo de 3-4 frases curtas. Evite explicações longas.'
+        : 'You are a financial consultant specialized in income and earnings. Analyze the provided data and provide insights on how to increase income and generate extra revenue. IMPORTANT: Be CONCISE and DIRECT. Maximum 3-4 short sentences. Avoid long explanations.',
       outcomes: language === 'pt'
-        ? 'Você é um consultor financeiro especializado em despesas e economia. Analise os dados fornecidos e forneça insights sobre como economizar dinheiro e reduzir gastos desnecessários.'
-        : 'You are a financial consultant specialized in expenses and savings. Analyze the provided data and provide insights on how to save money and reduce unnecessary spending.',
+        ? 'Você é um consultor financeiro especializado em despesas e economia. Analise os dados fornecidos e forneça insights sobre como economizar dinheiro e reduzir gastos desnecessários. IMPORTANTE: Seja CONCISO e DIRETO. Máximo de 3-4 frases curtas. Evite explicações longas.'
+        : 'You are a financial consultant specialized in expenses and savings. Analyze the provided data and provide insights on how to save money and reduce unnecessary spending. IMPORTANT: Be CONCISE and DIRECT. Maximum 3-4 short sentences. Avoid long explanations.',
       investments: language === 'pt'
-        ? 'Você é um consultor financeiro especializado em investimentos. Analise os dados fornecidos e forneça insights e dicas sobre investimentos, estratégias e oportunidades.'
-        : 'You are a financial consultant specialized in investments. Analyze the provided data and provide insights and tips on investments, strategies and opportunities.',
+        ? 'Você é um consultor financeiro especializado em investimentos. Analise os dados fornecidos e forneça insights e dicas sobre investimentos, estratégias e oportunidades. IMPORTANTE: Seja CONCISO e DIRETO. Máximo de 3-4 frases curtas. Evite explicações longas.'
+        : 'You are a financial consultant specialized in investments. Analyze the provided data and provide insights and tips on investments, strategies and opportunities. IMPORTANT: Be CONCISE and DIRECT. Maximum 3-4 short sentences. Avoid long explanations.',
     };
 
     const userPrompt = question
@@ -358,7 +358,7 @@ export async function generateAIInsight(
         },
       ],
       temperature: 0.7,
-      max_tokens: 1000,
+      max_tokens: 200,
     });
 
     return completion.choices[0]?.message?.content?.trim() || (language === 'pt' ? 'Não foi possível gerar insights no momento.' : 'Unable to generate insights at this time.');
