@@ -16,6 +16,7 @@ const EXPENSE_CATEGORIES = [
   'Health',
   'Education',
   'Travel',
+  'Transfer',
   'Other'
 ];
 

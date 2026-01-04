@@ -6,7 +6,7 @@ import { handleAddExpense, handleMonthlyReport, handleCategories } from './handl
 import { handleAddIncome, handleListIncomes } from './handlers/incomeHandlers';
 import { findExpensesByDescription, deleteExpense, getExpenseById, updateExpense, getExpensesByUser } from './models/Expense';
 import { findIncomesByDescription, deleteIncome, getIncomeById, updateIncome, getIncomesByUser } from './models/Income';
-import { findInvestmentsByName, deleteInvestment, getInvestmentById, updateInvestmentValueByNameAndType, getInvestmentsByUser, getContributionById, updateContribution, deleteContribution, getContributionsByInvestment, findInvestmentByNameAndType, createInvestmentContribution } from './models/Investment';
+import { findInvestmentsByName, deleteInvestment, getInvestmentById, updateInvestmentValueByNameAndType, getInvestmentsByUser, getContributionById, updateContribution, deleteContribution, getContributionsByInvestment, findInvestmentByNameAndType, findInvestmentByNameOnly, findInvestmentsByNameExact, createInvestmentContribution, getInvestmentsWithContributions } from './models/Investment';
 import { findHabitByName, getHabitLogs, getHabitById, updateHabit, getHabitsByUser, linkHabitToAction, getHabitStats } from './models/Habit';
 import { getObjectivesByUser, getObjectiveById, updateObjective, getKeyResultById, updateKeyResult, getActionById, updateAction, findKeyResultByTitle, findActionByDescription, createKeyResult, createAction } from './models/OKR';
 import { format } from 'date-fns';
@@ -360,27 +360,67 @@ bot.command('add', async (ctx) => {
   // Handle Contribution
   if (entityType === 'contribution') {
     // Parse arguments properly handling quoted strings
-    const contributionArgs = parseArgsUtil(commandText.substring('contribution'.length).trim());
-    if (contributionArgs.length < 3) {
+    // Remove "contribution" from the beginning of commandText
+    const contributionText = commandText.replace(/^contribution\s+/i, '').trim();
+    const contributionArgs = parseArgsUtil(contributionText);
+    
+    if (contributionArgs.length < 2) {
       return ctx.reply(
-        `${t(language, 'messages.usage')}: /add contribution <investment_name> <investment_type> <amount> [date]\n` +
-        `${t(language, 'messages.example')}: /add contribution "reserva" CDB 1000`
+        `${t(language, 'messages.usage')}: /add contribution <investment_name> <amount> [date]\n` +
+        `${t(language, 'messages.example')}: /add contribution "reserva" 1000`
       );
     }
-    const investmentName = contributionArgs[0];
-    const investmentType = contributionArgs[1];
-    const amountArg = contributionArgs[2];
-    const cleaned = amountArg.replace(',', '.');
-    const numOnly = cleaned.replace(/[^\d.]/g, '');
-    const parsed = parseFloat(numOnly);
-    const numFormat = /^\d+([.,]\d+)?$/;
-    const cleanArg = amountArg.replace(/[^\d.,]/g, '');
     
-    if (isNaN(parsed) || parsed <= 0 || !numFormat.test(cleanArg)) {
+    // Find amount (last number) and date (if present)
+    const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+    let dateStr: string | null = null;
+    let dateIndex = -1;
+    
+    for (let i = contributionArgs.length - 1; i >= 0; i--) {
+      if (datePattern.test(contributionArgs[i])) {
+        dateStr = contributionArgs[i];
+        dateIndex = i;
+        break;
+      }
+    }
+    
+    // Find numbers from the end (amount should be the last number before date)
+    const maxCheckIndex = dateIndex >= 0 ? dateIndex : contributionArgs.length;
+    const numbers: Array<{ value: number; index: number }> = [];
+    
+    for (let i = maxCheckIndex - 1; i >= 0; i--) {
+      // Clean the argument: remove everything except digits, dots, and commas
+      const cleanArg = contributionArgs[i].replace(/[^\d.,]/g, '');
+      if (!cleanArg) continue;
+      
+      // Replace comma with dot for parsing
+      const cleaned = cleanArg.replace(',', '.');
+      const parsed = parseFloat(cleaned);
+      
+      // Validate: must be a positive number and match the format
+      const numFormat = /^\d+([.,]\d+)?$/;
+      if (!isNaN(parsed) && parsed > 0 && numFormat.test(cleanArg)) {
+        numbers.push({ value: parsed, index: i });
+      }
+    }
+    
+    if (numbers.length === 0) {
       return ctx.reply(`${t(language, 'messages.invalidAmount')}\n${t(language, 'messages.example')}: 50.00 or 50,00`);
     }
-    const amount = parsed;
-    const dateStr = contributionArgs[3];
+    
+    const amount = numbers[0].value;
+    const amountIndex = numbers[0].index;
+    
+    // Investment name is everything before the amount
+    const investmentName = contributionArgs.slice(0, amountIndex).join(' ');
+    
+    if (!investmentName || investmentName.trim() === '') {
+      return ctx.reply(
+        `${t(language, 'messages.usage')}: /add contribution <investment_name> <amount> [date]\n` +
+        `${t(language, 'messages.example')}: /add contribution "reserva" 1000`
+      );
+    }
+    
     let contributionDate = new Date();
     if (dateStr) {
       const parsedDate = new Date(dateStr);
@@ -391,22 +431,40 @@ bot.command('add', async (ctx) => {
       }
     }
     
-    // Find investment by name and type
-    const investment = await findInvestmentByNameAndType(user.id, investmentName, investmentType);
-    if (!investment) {
+    // Find investment by name only (type not needed if there's only one)
+    const investmentsByName = await findInvestmentsByNameExact(user.id, investmentName);
+    
+    if (investmentsByName.length === 0) {
       return ctx.reply(
         language === 'pt'
-          ? `❌ Investimento "${investmentName}" (${investmentType}) não encontrado`
-          : `❌ Investment "${investmentName}" (${investmentType}) not found`
+          ? `❌ Investimento "${investmentName}" não encontrado`
+          : `❌ Investment "${investmentName}" not found`
+      );
+    } else if (investmentsByName.length === 1) {
+      // Only one investment with this name, use it
+      const investment = investmentsByName[0];
+      
+      await createInvestmentContribution(investment.id, amount, contributionDate);
+      await ctx.reply(
+        language === 'pt'
+          ? `✅ Contribuição adicionada ao investimento "${investment.name}" (${investment.type})!`
+          : `✅ Contribution added to investment "${investment.name}" (${investment.type})!`
+      );
+      return;
+    } else {
+      // Multiple investments with same name, need to specify type
+      const availableTypes = investmentsByName.map(inv => inv.type).join(', ');
+      return ctx.reply(
+        language === 'pt'
+          ? `❌ Múltiplos investimentos encontrados com o nome "${investmentName}".\n` +
+            `Tipos disponíveis: ${availableTypes}\n` +
+            `Use: /add contribution "${investmentName}" <tipo> ${amount}`
+          : `❌ Multiple investments found with name "${investmentName}".\n` +
+            `Available types: ${availableTypes}\n` +
+            `Use: /add contribution "${investmentName}" <type> ${amount}`
       );
     }
     
-    await createInvestmentContribution(investment.id, amount, contributionDate);
-    await ctx.reply(
-      language === 'pt'
-        ? `✅ Contribuição adicionada ao investimento "${investmentName}"!`
-        : `✅ Contribution added to investment "${investmentName}"!`
-    );
     return;
   }
   
@@ -660,15 +718,17 @@ bot.command('list', async (ctx) => {
   }
   
   if (commandText === 'investment' || commandText === 'investments') {
-    const investments = await getInvestmentsByUser(user.id);
+    const investments = await getInvestmentsWithContributions(user.id);
     if (investments.length === 0) {
       return ctx.reply(language === 'pt' ? '📋 Nenhum investimento encontrado' : '📋 No investments found');
     }
     
     let message = language === 'pt' ? '📈 Investimentos:\n\n' : '📈 Investments:\n\n';
     for (const investment of investments.slice(0, 50)) {
+      // Use total_contributed (sum of contributions) instead of amount field
+      const totalContributed = investment.total_contributed || 0;
       const currentValue = investment.current_value ? ` (R$ ${parseFloat(String(investment.current_value)).toFixed(2)})` : '';
-      message += `ID: ${investment.id} | ${investment.name} - ${investment.type} - R$ ${parseFloat(String(investment.amount)).toFixed(2)}${currentValue}\n`;
+      message += `ID: ${investment.id} | ${investment.name} - ${investment.type} - R$ ${totalContributed.toFixed(2)}${currentValue}\n`;
     }
     await ctx.reply(message);
     return;

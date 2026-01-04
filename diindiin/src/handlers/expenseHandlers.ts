@@ -2,6 +2,7 @@ import { Context } from 'telegraf';
 import { getUserByTelegramId, getUserLanguage } from '../models/User';
 import { createExpense, getMonthlyExpenses, getExpensesByCategory, getTotalExpensesByMonth } from '../models/Expense';
 import { getTotalIncomesByMonth } from '../models/Income';
+import { getMonthlyContributions, getTotalContributionsByMonth } from '../models/Investment';
 import { categorizeExpense, generateFinancialInsight } from '../services/aiService';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { nowInTimezone } from '../utils/timezone';
@@ -16,8 +17,22 @@ export async function handleAddExpense(ctx: Context, amount: number, description
       return ctx.reply(t(language, 'messages.pleaseStart'));
     }
 
-    // Use AI to categorize
-    const category = await categorizeExpense(description);
+    // Check for investment/transfer keywords first
+    const lowerDescription = description.toLowerCase();
+    const transferKeywords = [
+      'investimento', 'investment', 'investir', 'invest',
+      'transferencia', 'transferência', 'transfer', 'transf',
+      'contribuicao', 'contribuição', 'contribution', 'contrib',
+      'aplicacao', 'aplicação', 'aplicar', 'aplic'
+    ];
+    
+    let category: string;
+    if (transferKeywords.some(keyword => lowerDescription.includes(keyword))) {
+      category = 'Transfer';
+    } else {
+      // Use AI to categorize
+      category = await categorizeExpense(description);
+    }
 
     const timezone = user.timezone || 'America/Sao_Paulo';
     const expense = await createExpense(user.id, amount, description, category, timezone);
@@ -51,12 +66,15 @@ export async function handleMonthlyReport(ctx: Context) {
 
     let totalExpenses = 0;
     let totalIncomes = 0;
+    let totalInvestments = 0;
     let expenses: any[] = [];
+    let contributions: any[] = [];
     let byCategory: any[] = [];
 
     try {
       expenses = await getMonthlyExpenses(user.id, year, month, timezone);
-      totalExpenses = await getTotalExpensesByMonth(user.id, year, month, timezone);
+      // Include all expenses in total (including transfers, as money left the account)
+      totalExpenses = expenses.reduce((sum, expense) => sum + parseFloat(String(expense.amount || 0)), 0);
     } catch (error) {
       console.error('Error fetching expenses:', error);
       // Continue even if expenses fail
@@ -68,6 +86,15 @@ export async function handleMonthlyReport(ctx: Context) {
       console.error('Error fetching incomes:', error);
       // If incomes table doesn't exist, set to 0
       totalIncomes = 0;
+    }
+
+    try {
+      contributions = await getMonthlyContributions(user.id, year, month, timezone);
+      totalInvestments = await getTotalContributionsByMonth(user.id, year, month, timezone);
+    } catch (error) {
+      console.error('Error fetching investments:', error);
+      // If investments table doesn't exist, set to 0
+      totalInvestments = 0;
     }
 
     try {
@@ -87,7 +114,7 @@ export async function handleMonthlyReport(ctx: Context) {
       byCategory = [];
     }
 
-    if (expenses.length === 0 && totalIncomes === 0) {
+    if (expenses.length === 0 && totalIncomes === 0 && totalInvestments === 0) {
       return ctx.reply(language === 'pt' ? '📊 Nenhuma transação registrada neste mês.' : '📊 No transactions recorded for this month.');
     }
 
@@ -116,13 +143,60 @@ export async function handleMonthlyReport(ctx: Context) {
         : `\n📝 Expense Transactions: ${expenses.length}\n`;
       
       if (byCategory.length > 0) {
-        report += language === 'pt' ? `📈 Por Categoria:\n` : `📈 By Category:\n`;
-
+        const transferCategories = ['Transferência', 'Transfer', 'transferência', 'transfer', 'Transferencia'];
+        
+        // Separate transfers from other categories
+        const transferCategories_list: typeof byCategory = [];
+        const otherCategories: typeof byCategory = [];
+        
         for (const cat of byCategory) {
-          // Extra safety: ensure it's a number
-          const catTotal = typeof cat.total === 'number' ? cat.total : parseFloat(String(cat.total || '0'));
-          const percentage = totalExpenses > 0 ? (catTotal / totalExpenses) * 100 : 0;
-          report += `  • ${cat.category}: R$ ${catTotal.toFixed(2)} (${percentage.toFixed(1)}%)\n`;
+          const isTransfer = transferCategories.includes(cat.category);
+          if (isTransfer) {
+            transferCategories_list.push(cat);
+          } else {
+            otherCategories.push(cat);
+          }
+        }
+        
+        // Show other categories first
+        if (otherCategories.length > 0) {
+          report += language === 'pt' ? `📈 Por Categoria:\n` : `📈 By Category:\n`;
+          for (const cat of otherCategories) {
+            const catTotal = typeof cat.total === 'number' ? cat.total : parseFloat(String(cat.total || '0'));
+            const percentage = totalExpenses > 0 ? (catTotal / totalExpenses) * 100 : 0;
+            report += `  • ${cat.category}: R$ ${catTotal.toFixed(2)} (${percentage.toFixed(1)}%)\n`;
+          }
+        }
+        
+        // Show transfers separately
+        if (transferCategories_list.length > 0) {
+          report += language === 'pt' ? `\n💸 Transferências entre Contas:\n` : `\n💸 Account Transfers:\n`;
+          for (const cat of transferCategories_list) {
+            const catTotal = typeof cat.total === 'number' ? cat.total : parseFloat(String(cat.total || '0'));
+            const percentage = totalExpenses > 0 ? (catTotal / totalExpenses) * 100 : 0;
+            report += `  • ${cat.category}: R$ ${catTotal.toFixed(2)} (${percentage.toFixed(1)}%)\n`;
+          }
+        }
+      }
+    }
+
+    if (contributions.length > 0) {
+      report += language === 'pt'
+        ? `\n📝 Contribuições de Investimentos: ${contributions.length}\n`
+        : `\n📝 Investment Contributions: ${contributions.length}\n`;
+      
+      // Group by investment name
+      const byInvestment: { [key: string]: number } = {};
+      for (const contrib of contributions) {
+        const key = `${contrib.investment_name} (${contrib.investment_type})`;
+        byInvestment[key] = (byInvestment[key] || 0) + parseFloat(String(contrib.amount));
+      }
+      
+      if (Object.keys(byInvestment).length > 0) {
+        report += language === 'pt' ? `📈 Por Investimento:\n` : `📈 By Investment:\n`;
+        for (const [investment, total] of Object.entries(byInvestment)) {
+          const percentage = totalInvestments > 0 ? (total / totalInvestments) * 100 : 0;
+          report += `  • ${investment}: R$ ${total.toFixed(2)} (${percentage.toFixed(1)}%)\n`;
         }
       }
     }

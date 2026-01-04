@@ -1,4 +1,5 @@
 import { pool } from '../config/database';
+import { toUTC, fromUTC } from '../utils/timezone';
 
 export interface Investment {
   id: number;
@@ -27,11 +28,47 @@ export async function findInvestmentByNameAndType(
   type: string
 ): Promise<Investment | null> {
   const result = await pool.query(
-    'SELECT * FROM investments WHERE user_id = $1 AND name = $2 AND type = $3',
+    'SELECT * FROM investments WHERE user_id = $1 AND LOWER(name) = LOWER($2) AND LOWER(type) = LOWER($3)',
     [userId, name, type]
   );
   
   return result.rows[0] || null;
+}
+
+export async function findInvestmentByNameOnly(
+  userId: number,
+  name: string
+): Promise<Investment | null> {
+  const result = await pool.query(
+    'SELECT * FROM investments WHERE user_id = $1 AND LOWER(name) = LOWER($2) LIMIT 1',
+    [userId, name]
+  );
+  
+  return result.rows[0] || null;
+}
+
+export async function findInvestmentsByNameExact(
+  userId: number,
+  name: string
+): Promise<Investment[]> {
+  const result = await pool.query(
+    `SELECT DISTINCT ON (name, type)
+       i.id,
+       i.user_id,
+       i.name,
+       i.type,
+       i.amount,
+       i.current_value,
+       i.purchase_date,
+       i.notes,
+       i.created_at
+     FROM investments i
+     WHERE i.user_id = $1 AND LOWER(i.name) = LOWER($2)
+     ORDER BY i.name, i.type, i.purchase_date DESC`,
+    [userId, name]
+  );
+  
+  return result.rows;
 }
 
 export async function findInvestmentsByName(
@@ -372,4 +409,68 @@ export async function getInvestmentsWithContributions(userId: number): Promise<A
     total_contributed: parseFloat(row.total_contributed),
     contribution_count: parseInt(row.contribution_count)
   }));
+}
+
+export async function getMonthlyContributions(
+  userId: number,
+  year: number,
+  month: number,
+  timezone?: string
+): Promise<Array<InvestmentContribution & { investment_name: string; investment_type: string }>> {
+  try {
+    // Get user timezone if not provided
+    if (!timezone) {
+      const userResult = await pool.query('SELECT timezone FROM users WHERE id = $1', [userId]);
+      timezone = userResult.rows[0]?.timezone || 'America/Sao_Paulo';
+    }
+    
+    // Convert month boundaries to UTC for comparison
+    const monthStr = String(month).padStart(2, '0');
+    const startOfMonth = toUTC(new Date(`${year}-${monthStr}-01T00:00:00`), timezone);
+    const endOfMonth = toUTC(new Date(`${year}-${monthStr}-${new Date(year, month, 0).getDate()}T23:59:59`), timezone);
+    
+    // Get all contributions in the UTC range
+    const result = await pool.query(
+      `SELECT ic.*, i.name as investment_name, i.type as investment_type
+       FROM investment_contributions ic
+       INNER JOIN investments i ON ic.investment_id = i.id
+       WHERE i.user_id = $1 
+       AND ic.contribution_date >= $2 
+       AND ic.contribution_date <= $3
+       ORDER BY ic.contribution_date DESC`,
+      [userId, startOfMonth, endOfMonth]
+    );
+    
+    // Filter by month/year in user timezone
+    const filtered = result.rows.filter(row => {
+      const zonedDate = fromUTC(new Date(row.contribution_date), timezone!);
+      return zonedDate.getFullYear() === year && zonedDate.getMonth() + 1 === month;
+    });
+    
+    return filtered;
+  } catch (error: any) {
+    // If table doesn't exist, return empty array
+    if (error?.code === '42P01' || error?.message?.includes('does not exist')) {
+      console.log('Investment contributions table does not exist yet, returning empty array');
+      return [];
+    }
+    throw error;
+  }
+}
+
+export async function getTotalContributionsByMonth(
+  userId: number,
+  year: number,
+  month: number,
+  timezone?: string
+): Promise<number> {
+  try {
+    const contributions = await getMonthlyContributions(userId, year, month, timezone);
+    return contributions.reduce((sum, contrib) => sum + parseFloat(String(contrib.amount)), 0);
+  } catch (error: any) {
+    if (error?.code === '42P01' || error?.message?.includes('does not exist')) {
+      return 0;
+    }
+    throw error;
+  }
 }
